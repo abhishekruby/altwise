@@ -91,10 +91,15 @@ async function mayUseCloud(): Promise<boolean> {
   $('#cloud-ask-why').textContent = availability === 'downloading' || availability === 'downloadable'
     ? 'It is still downloading. Once it is ready, scans run on this computer again.'
     : 'This computer or browser cannot run it. Chrome needs a GPU with more than 4 GB of memory, or 16 GB of RAM.';
-  d.returnValue = '';
   d.showModal();
-  await new Promise((resolve) => d.addEventListener('close', resolve, { once: true }));
-  cloudOk = d.returnValue === 'cloud';
+  // Listen to the buttons and Esc directly: in some Chrome builds the dialog's close event never arrives.
+  const choice = await new Promise<string>((resolve) => {
+    for (const b of d.querySelectorAll('button')) b.addEventListener('click', () => resolve(b.value), { once: true });
+    d.addEventListener('cancel', () => resolve('cancel'), { once: true });
+    d.addEventListener('close', () => resolve(d.returnValue), { once: true });
+  });
+  d.close();
+  cloudOk = choice === 'cloud';
   return cloudOk;
 }
 
@@ -155,7 +160,8 @@ async function loadImage(src: string) {
  * Paints every photographic area grey, so a flyer can go to the cloud without the photo of people in it.
  * Nearby photo tiles are grouped and each group's whole bounding box is covered, plus a two-tile margin,
  * which also hides the flatter parts of the photo (a wall, the sky) that the tile check does not flag.
- * Returns null if anything photographic is still left: then the image stays on the device.
+ * Returns null if the grey would cover over 40% of the image, or anything photographic is still left:
+ * then the image stays on the device.
  */
 function redact(src: HTMLCanvasElement, regions: [number, number][], tile = 16): HTMLCanvasElement | null {
   const key = (x: number, y: number) => `${x},${y}`;
@@ -181,8 +187,12 @@ function redact(src: HTMLCanvasElement, regions: [number, number][], tile = 16):
     // Two tiles of margin: the smooth edge of a photo (sky, a wall) can be two tiles wide and is not flagged.
     ctx.fillRect(x0 - 2 * tile, y0 - 2 * tile, x1 - x0 + 5 * tile, y1 - y0 + 5 * tile);
   }
-  const left = photoRegions(ctx.getImageData(0, 0, out.width, out.height).data, out.width, out.height);
-  return left.length ? null : out;
+  const pixels = ctx.getImageData(0, 0, out.width, out.height).data;
+  // If the grey covers much of the image, it was a photo, not a flyer with a photo in it: keep it local.
+  let grey = 0;
+  for (let i = 0; i < pixels.length; i += 4) if (pixels[i] === 154 && pixels[i + 1] === 160 && pixels[i + 2] === 166) grey++;
+  if (grey / (out.width * out.height) > 0.4) return null;
+  return photoRegions(pixels, out.width, out.height).length ? null : out;
 }
 
 // ---------- cloud queue ----------
@@ -489,7 +499,15 @@ function render() {
   $('#meter-rules').style.flexGrow = String(rules);
   $('#meter-local').style.flexGrow = String(device);
   $('#meter-cloud').style.flexGrow = String(cloud);
-  $('#privacy-line').textContent = `${total - cloud} of ${total} images never left this device`;
+  // The number that matters for privacy: photos of people that reached the cloud (only possible in the
+  // cloud fallback the person agreed to). Blanked-out flyers went without the photo.
+  const peopleOut = items.filter((i) => i.hasPeople && i.sources.includes('in_cloud') && !i.cloudView).length;
+  const blanked = items.filter((i) => i.cloudView).length;
+  $('#privacy-line').textContent = peopleOut
+    ? `${peopleOut} photo${peopleOut > 1 ? 's' : ''} of people went to the cloud because Gemini Nano was not ready.`
+    : `No photo of a person was sent to the cloud${blanked ? `. ${blanked} flyer${blanked > 1 ? 's' : ''} went with the photo painted grey` : ''}.`;
+  $('#privacy-line').dataset.state = peopleOut ? 'warn' : 'ok';
+  $('#local-line').textContent = `${total - cloud} of ${total} images never left this device.`;
   const nano = items.filter((i) => i.ms.device);
   $('#timing').textContent = nano.length && !busy
     ? `Gemini Nano took ${secs(nano.reduce((s, i) => s + i.ms.device!, 0) / nano.length)} an image on average.${scanMs ? ` Whole scan: ${secs(scanMs)}, with the cloud working in parallel.` : ''}`
