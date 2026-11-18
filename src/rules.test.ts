@@ -14,6 +14,17 @@ assert.equal(gradeAlt('Map of the school'), 'ok');
 assert.equal(gradeAlt('Image of a girl reading'), 'redundant');
 assert.equal(gradeAlt('x'.repeat(151)), 'too-long');
 assert.equal(gradeAlt('Students planting trees in the school garden'), 'ok');
+// Seen on real sites (November 2026)
+assert.equal(gradeAlt('TOJ_Badge_Logo_banner_size'), 'filename');
+assert.equal(gradeAlt('spring-concert-2026'), 'filename');
+assert.equal(gradeAlt('Wi-Fi'), 'ok');
+assert.equal(gradeAlt('Summer Recreation Program Flyer'), 'label-only');
+assert.equal(gradeAlt('Summer program announcement'), 'label-only');
+assert.equal(gradeAlt('Aldrin ES banner'), 'label-only');
+assert.equal(gradeAlt('Lunch menu'), 'label-only');
+assert.equal(gradeAlt('Return to Home'), 'ok');
+assert.equal(gradeAlt('Download our iOS App'), 'ok');
+assert.equal(gradeAlt('Flyer for the spring bake sale on April 10, 3 to 5 PM in the gym'), 'ok');
 
 const base: PageImage = {
   id: 0, src: '', alt: null, width: 400, height: 300, naturalWidth: 800, naturalHeight: 600,

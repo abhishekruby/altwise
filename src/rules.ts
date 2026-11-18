@@ -1,6 +1,6 @@
 // Checks that need no AI. Pure functions, so rules.test.ts can run them in Node.
 
-export type AltGrade = 'missing' | 'empty' | 'filename' | 'generic' | 'too-long' | 'redundant' | 'ok';
+export type AltGrade = 'missing' | 'empty' | 'filename' | 'generic' | 'label-only' | 'too-long' | 'redundant' | 'ok';
 
 export interface PageImage {
   id: number;
@@ -25,13 +25,20 @@ const FILE_EXT = /\.(jpe?g|png|gif|webp|svg|avif|bmp)$/i;
 const CAMERA_NAME = /^(img|dsc|dscn|pxl|image|photo|screenshot)[\s_-]?\d+/i;
 const GENERIC = /^(an? |the )?(image|picture|pic|photo|photograph|graphic|logo|icon|img|banner|spacer|placeholder|untitled|chart|graph|diagram|map|poster|flyer|infographic|figure|screenshot|button|link|click here)( \d+)?$/i;
 const REDUNDANT = /^(an? )?(image|picture|photo|graphic) (of|showing)\b/i;
+// A file name with the extension dropped: "TOJ_Badge_Logo_banner_size", "spring-concert-2026".
+const BARE_FILENAME = /^\S+$/;
+const FILE_SEPARATORS = /_|-.*-/;
+// Names a text-heavy image without saying what it says: "Summer Recreation Program Flyer", "Lunch menu".
+// Seen on real town and school sites, where the dates, times and prices exist only inside the image.
+const LABEL_ONLY = /^(\S+\s){0,5}(flyers?|posters?|infographics?|announcements?|banners?|schedules?|menus?|calendars?|newsletters?|brochures?|handouts?|forms?|timetables?|notices?|letters?)$/i;
 
 export function gradeAlt(alt: string | null): AltGrade {
   if (alt === null) return 'missing';
   const a = alt.trim();
   if (a === '') return 'empty';
-  if (FILE_EXT.test(a) || CAMERA_NAME.test(a)) return 'filename';
+  if (FILE_EXT.test(a) || CAMERA_NAME.test(a) || (BARE_FILENAME.test(a) && FILE_SEPARATORS.test(a))) return 'filename';
   if (GENERIC.test(a)) return 'generic';
+  if (LABEL_ONLY.test(a)) return 'label-only';
   if (a.length > 150) return 'too-long';
   if (REDUNDANT.test(a)) return 'redundant';
   return 'ok';
@@ -42,6 +49,7 @@ export const GRADE_LABEL: Record<AltGrade, string> = {
   empty: 'Empty alt',
   filename: 'Alt is a file name',
   generic: 'Alt is too generic',
+  'label-only': 'Alt names it, not what it says',
   'too-long': 'Alt is too long',
   redundant: 'Starts with "image of"',
   ok: 'Alt looks fine',
