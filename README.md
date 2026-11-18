@@ -47,7 +47,7 @@ The counter at the top shows how many images were handled by rules, by Gemini Na
 
 ## Try it
 
-**In your browser, nothing to install: https://altwise.web.app** shows the demo school page beside the real Altwise panel. It is the same panel code as the extension, built as a normal web page (Firebase Hosting, App Check with reCAPTCHA). Gemini Nano runs on device wherever Chrome supports the Prompt API on the web; otherwise Altwise asks before using the cloud.
+**In your browser, nothing to install: https://altwise.web.app** shows the demo school page beside the real Altwise panel. It is the same panel code as the extension, built as a normal web page (Firebase Hosting, App Check with reCAPTCHA through Google Cloud Fraud Defense). Gemini Nano runs on device wherever Chrome supports the Prompt API on the web; otherwise Altwise asks before using the cloud.
 
 ### Load the extension
 

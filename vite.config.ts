@@ -11,7 +11,7 @@ export default defineConfig(({ mode, command }) => {
   return {
     base: './',
     publicDir: web ? false : 'public',
-    // The public web build must never contain the App Check debug token. It uses reCAPTCHA instead.
+    // The public web build must never contain the App Check debug token. It uses reCAPTCHA (Fraud Defense) instead.
     define: web && command === 'build' ? { 'import.meta.env.VITE_APPCHECK_DEBUG_TOKEN': '""' } : {},
     build: {
       outDir: web ? 'web-dist' : 'dist',
