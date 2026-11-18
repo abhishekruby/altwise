@@ -1,0 +1,12 @@
+{
+  "manifest_version": 3,
+  "name": "Altwise",
+  "version": "0.1.0",
+  "description": "Audit the images on any page and write alt text. Photos of people are read on your device and never uploaded.",
+  "minimum_chrome_version": "139",
+  "action": { "default_title": "Open Altwise" },
+  "side_panel": { "default_path": "sidepanel.html" },
+  "background": { "service_worker": "background.js" },
+  "permissions": ["sidePanel", "scripting", "storage"],
+  "host_permissions": ["<all_urls>"]
+}

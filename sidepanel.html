@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Altwise</title>
+<style>
+  :root {
+    --bg: #f7f6f2; --panel: #ffffff; --ink: #1c1f23; --muted: #5d6470; --line: #e3e1da;
+    --device: #0d7a5f; --device-bg: #e3f4ee; --cloud: #2f5bd3; --cloud-bg: #e6ecfb;
+    --bad: #b3261e; --bad-bg: #fbe9e7; --warn: #8a5a00; --warn-bg: #fdf1d8; --focus: #e8590c;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #15171a; --panel: #1e2125; --ink: #eceae4; --muted: #a2a8b2; --line: #30343a;
+      --device: #4fd1a5; --device-bg: #133229; --cloud: #8fb0ff; --cloud-bg: #1b2747;
+      --bad: #ff8a80; --bad-bg: #3a1d1b; --warn: #f5c26b; --warn-bg: #3a2c12;
+      color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+  header { padding: 16px 16px 12px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .brand { font-weight: 700; font-size: 18px; letter-spacing: -0.01em; }
+  .brand span { color: var(--device); }
+  #device { font-size: 12px; padding: 3px 9px; border-radius: 99px; background: var(--line); color: var(--muted); white-space: nowrap; }
+  #device[data-state="ok"] { background: var(--device-bg); color: var(--device); }
+  #device[data-state="wait"] { background: var(--warn-bg); color: var(--warn); }
+  main { padding: 0 16px 24px; }
+  .intro { color: var(--muted); margin: 0 0 12px; }
+  button { font: inherit; border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+  button:hover { border-color: var(--muted); }
+  button.primary, #scan { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+  #scan { width: 100%; padding: 11px; font-weight: 600; font-size: 15px; }
+  #scan[disabled] { opacity: .55; cursor: progress; }
+  .toggle { display: flex; gap: 8px; align-items: flex-start; margin: 10px 0 4px; color: var(--muted); font-size: 13px; }
+  .toggle input { margin-top: 3px; accent-color: var(--device); }
+  .progress { height: 4px; background: var(--line); border-radius: 4px; overflow: hidden; margin-top: 12px; }
+  #progress-bar { height: 100%; width: 0; background: var(--device); transition: width .3s; }
+  #progress-text { font-size: 12px; color: var(--muted); margin-top: 4px; min-height: 18px; }
+  #error { color: var(--bad); font-size: 13px; }
+  .box { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; margin-top: 12px; }
+  #page-title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .scores { display: flex; align-items: baseline; gap: 10px; margin: 8px 0 12px; }
+  .score { font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .score small { font-size: 13px; color: var(--muted); font-weight: 400; }
+  .arrow { color: var(--muted); }
+  .meter { display: flex; height: 10px; border-radius: 6px; overflow: hidden; background: var(--line); gap: 2px; }
+  .meter div { flex: 0 1 0; transition: flex-grow .4s; }
+  #meter-rules { background: var(--muted); opacity: .5; }
+  #meter-local { background: var(--device); }
+  #meter-cloud { background: var(--cloud); }
+  .legend { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; margin-top: 6px; }
+  .legend b { font-variant-numeric: tabular-nums; }
+  .legend .r { color: var(--muted); } .legend .l { color: var(--device); } .legend .c { color: var(--cloud); }
+  #privacy-line { font-size: 13px; margin-top: 8px; font-weight: 500; }
+  .tools { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+  .tabs { display: flex; gap: 4px; margin: 16px 0 8px; border-bottom: 1px solid var(--line); }
+  .tabs button { border: 0; border-radius: 0; background: none; padding: 8px 10px; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  .tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--ink); font-weight: 600; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin-bottom: 10px; }
+  .card.status-accepted { border-color: var(--device); }
+  .card-head { display: flex; gap: 12px; }
+  .thumb { width: 76px; height: 76px; object-fit: cover; border-radius: 8px; background: var(--line); flex: none; }
+  .meta { min-width: 0; flex: 1; }
+  .chips { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
+  .chip, .badge { font-size: 11px; padding: 2px 7px; border-radius: 99px; background: var(--line); color: var(--muted); font-weight: 500; }
+  .chip.grade-missing, .chip.grade-filename, .chip.grade-generic { background: var(--bad-bg); color: var(--bad); }
+  .chip.grade-empty, .chip.grade-too-long, .chip.grade-redundant { background: var(--warn-bg); color: var(--warn); }
+  .badge.device { background: var(--device-bg); color: var(--device); font-weight: 700; }
+  .badge.cloud { background: var(--cloud-bg); color: var(--cloud); font-weight: 700; }
+  .current { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+  .note { font-size: 12px; margin-top: 4px; }
+  .field-label { display: block; font-size: 12px; color: var(--muted); margin: 10px 0 4px; }
+  textarea { width: 100%; font: inherit; border: 1px solid var(--line); border-radius: 8px; padding: 8px; background: var(--bg); color: var(--ink); resize: vertical; }
+  details { margin-top: 8px; font-size: 13px; }
+  details summary { cursor: pointer; color: var(--cloud); }
+  details p { white-space: pre-wrap; margin: 6px 0 0; }
+  .actions { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; align-items: center; }
+  .done { color: var(--device); font-weight: 600; font-size: 13px; margin-right: 4px; }
+  .state { margin-top: 10px; font-size: 13px; color: var(--muted); }
+  .state.working::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--device); margin-right: 6px; animation: pulse 1s infinite; }
+  @keyframes pulse { 50% { opacity: .25; } }
+  .empty { color: var(--muted); text-align: center; padding: 24px 0; }
+  #pdfs h2 { font-size: 14px; margin: 0 0 6px; }
+  #pdf-list { margin: 0; padding-left: 18px; font-size: 13px; }
+  #pdf-list a { color: var(--cloud); overflow-wrap: anywhere; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">Alt<span>wise</span></div>
+  <div id="device" role="status">Checking model…</div>
+</header>
+<main>
+  <p class="intro">Finds images with missing or weak alt text and writes better text. Photos of people are read on this device.</p>
+  <button id="scan">Scan this page</button>
+  <label class="toggle"><input type="checkbox" id="strict"> <span>Strict privacy: classify every image on this device only, no cloud fallback</span></label>
+  <div class="progress" aria-hidden="true"><div id="progress-bar"></div></div>
+  <div id="progress-text" role="status" aria-live="polite"></div>
+  <div id="error" role="alert"></div>
+
+  <section id="summary" class="box" hidden aria-label="Page summary">
+    <div id="page-title"></div>
+    <div class="scores">
+      <span class="score"><span id="score-before">0</span><small>/100 now</small></span>
+      <span class="arrow">→</span>
+      <span class="score"><span id="score-after">0</span><small>/100 after fixes</small></span>
+    </div>
+    <div class="meter" aria-hidden="true"><div id="meter-rules"></div><div id="meter-local"></div><div id="meter-cloud"></div></div>
+    <div class="legend"><span class="r">Rules only <b id="count-rules">0</b></span><span class="l">Gemini Nano on device <b id="count-local">0</b></span><span class="c">Cloud <b id="count-cloud">0</b></span></div>
+    <div id="privacy-line"></div>
+    <div class="tools"><button id="copy-all">Copy accepted HTML</button><button id="export-csv">Export CSV report</button></div>
+  </section>
+
+  <section id="pdfs" class="box" hidden>
+    <h2>Linked PDFs (<span id="pdf-count">0</span>)</h2>
+    <ul id="pdf-list"></ul>
+  </section>
+
+  <div class="tabs" role="tablist">
+    <button id="tab-todo" role="tab" aria-selected="true">To fix</button>
+    <button id="tab-all" role="tab" aria-selected="false">All</button>
+  </div>
+  <div id="list" aria-live="polite"></div>
+</main>
+<script type="module" src="./src/main.ts"></script>
+</body>
+</html>
