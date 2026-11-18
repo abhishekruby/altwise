@@ -79,9 +79,9 @@ export interface Classification {
  * sees them at 768x768 and cannot read small numbers reliably.
  * Logos and link images contain text too, but their alt names the destination, so they stay local.
  */
-export function shouldEscalate(c: Classification): boolean {
+export function shouldEscalate(c: Classification, escalateText = true): boolean {
   if (c.has_people) return false;
-  return c.kind === 'complex' || (c.has_text && c.kind === 'informative');
+  return c.kind === 'complex' || (escalateText && c.has_text && c.kind === 'informative');
 }
 
 /** Cleans model alt text: trims, drops "Image of", caps length at a word boundary. */

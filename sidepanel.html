@@ -84,9 +84,19 @@
   .state.working::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--device); margin-right: 6px; animation: pulse 1s infinite; }
   @keyframes pulse { 50% { opacity: .25; } }
   .empty { color: var(--muted); text-align: center; padding: 24px 0; }
-  #pdfs h2 { font-size: 14px; margin: 0 0 6px; }
-  #pdf-list { margin: 0; padding-left: 18px; font-size: 13px; }
-  #pdf-list a { color: var(--cloud); overflow-wrap: anywhere; }
+  .section-h { font-size: 15px; margin: 20px 0 2px; }
+  .section-h .count { color: var(--muted); font-weight: 400; }
+  .hint { font-size: 12px; color: var(--muted); margin: 0 0 8px; }
+  .pdf-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .pdf-head a { color: var(--ink); font-weight: 600; overflow-wrap: anywhere; }
+  .size { font-size: 12px; color: var(--muted); }
+  .checks { list-style: none; padding: 0; margin: 10px 0 0; font-size: 13px; }
+  .checks li { padding: 2px 0; }
+  .checks .pass span[aria-hidden] { color: var(--device); font-weight: 700; }
+  .checks .fail span[aria-hidden] { color: var(--bad); font-weight: 700; }
+  .summary { font-size: 13px; margin: 10px 0 0; }
+  details ul { margin: 6px 0 0; padding-left: 18px; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 </style>
 </head>
@@ -116,9 +126,10 @@
     <div class="tools"><button id="copy-all">Copy accepted HTML</button><button id="export-csv">Export CSV report</button></div>
   </section>
 
-  <section id="pdfs" class="box" hidden>
-    <h2>Linked PDFs (<span id="pdf-count">0</span>)</h2>
-    <ul id="pdf-list"></ul>
+  <section id="pdfs" hidden aria-labelledby="pdf-h">
+    <h2 id="pdf-h" class="section-h">Linked PDFs <span class="count">(<span id="pdf-count">0</span>)</span></h2>
+    <p class="hint">Structure is checked on this device. The content review runs in the cloud, because PDF input is cloud only.</p>
+    <div id="pdf-list"></div>
   </section>
 
   <div class="tabs" role="tablist">

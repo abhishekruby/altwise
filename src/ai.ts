@@ -1,8 +1,10 @@
-// All AI calls go through Firebase AI Logic. The classifier is hybrid; the describer is cloud only.
+// All AI calls go through Firebase AI Logic. The classifier is hybrid; the describer and PDF review are cloud only.
+// Remote Config can change the cloud model and routing without shipping a new extension.
 
 import { initializeApp } from 'firebase/app';
 import { CustomProvider, initializeAppCheck } from 'firebase/app-check';
 import { getAI, getGenerativeModel, GoogleAIBackend, InferenceMode, type GenerativeModel, type Part } from 'firebase/ai';
+import { fetchAndActivate, getRemoteConfig, getValue } from 'firebase/remote-config';
 import type { Classification, PageImage } from './rules.ts';
 
 const env = import.meta.env;
@@ -22,7 +24,36 @@ initializeAppCheck(app, {
 });
 
 const ai = getAI(app, { backend: new GoogleAIBackend() });
-const CLOUD_MODEL = 'gemini-3.5-flash-lite';
+
+// ---------- Remote Config ----------
+
+const DEFAULTS = {
+  cloud_model: 'gemini-3.5-flash-lite',
+  max_images: 40,
+  escalate_text_images: true,
+  pdf_max_mb: 15,
+};
+export const settings = { ...DEFAULTS };
+
+const rc = getRemoteConfig(app);
+rc.settings.minimumFetchIntervalMillis = 60 * 60 * 1000;
+rc.defaultConfig = DEFAULTS;
+
+/** Fetches Remote Config once per panel load. Falls back to defaults offline. */
+export async function loadSettings(): Promise<void> {
+  try {
+    await fetchAndActivate(rc);
+  } catch {
+    // offline or blocked: keep defaults
+  }
+  settings.cloud_model = getValue(rc, 'cloud_model').asString() || DEFAULTS.cloud_model;
+  settings.max_images = getValue(rc, 'max_images').asNumber() || DEFAULTS.max_images;
+  settings.escalate_text_images = getValue(rc, 'escalate_text_images').asBoolean();
+  settings.pdf_max_mb = getValue(rc, 'pdf_max_mb').asNumber() || DEFAULTS.pdf_max_mb;
+  built = null;
+}
+
+// ---------- models ----------
 
 const KINDS = ['decorative', 'informative', 'functional', 'complex'];
 const classifySchema = (onDevice: boolean) => ({
@@ -38,7 +69,9 @@ const classifySchema = (onDevice: boolean) => ({
   additionalProperties: false,
 });
 
-function classifier(strictPrivacy: boolean): GenerativeModel {
+const json = (schema: Record<string, unknown>) => ({ responseMimeType: 'application/json', responseJsonSchema: schema });
+
+function classifier(cloudModel: string, strictPrivacy: boolean): GenerativeModel {
   return getGenerativeModel(ai, {
     mode: strictPrivacy ? InferenceMode.ONLY_ON_DEVICE : InferenceMode.PREFER_ON_DEVICE,
     onDeviceParams: {
@@ -48,35 +81,45 @@ function classifier(strictPrivacy: boolean): GenerativeModel {
       },
       promptOptions: { responseConstraint: classifySchema(true) },
     },
-    inCloudParams: {
-      model: CLOUD_MODEL,
-      generationConfig: { responseMimeType: 'application/json', responseJsonSchema: classifySchema(false) },
-    },
+    inCloudParams: { model: cloudModel, generationConfig: json(classifySchema(false)) },
   });
 }
 
-const models = { normal: classifier(false), strict: classifier(true) };
+function cloudOnly(cloudModel: string, schema: Record<string, unknown>): GenerativeModel {
+  return getGenerativeModel(ai, { mode: InferenceMode.ONLY_IN_CLOUD, inCloudParams: { model: cloudModel, generationConfig: json(schema) } });
+}
 
-const describer = getGenerativeModel(ai, {
-  mode: InferenceMode.ONLY_IN_CLOUD,
-  inCloudParams: {
-    model: CLOUD_MODEL,
-    generationConfig: {
-      responseMimeType: 'application/json',
-      responseJsonSchema: {
-        type: 'object',
-        properties: { alt: { type: 'string' }, long_description: { type: 'string' } },
-        required: ['alt', 'long_description'],
+function build(m: string) {
+  return {
+    normal: classifier(m, false),
+    strict: classifier(m, true),
+    describer: cloudOnly(m, {
+      type: 'object',
+      properties: { alt: { type: 'string' }, long_description: { type: 'string' } },
+      required: ['alt', 'long_description'],
+    }),
+    pdf: cloudOnly(m, {
+      type: 'object',
+      properties: {
+        title: { type: 'string' },
+        summary: { type: 'string' },
+        scanned: { type: 'boolean' },
+        issues: { type: 'array', items: { type: 'string' } },
+        link_text: { type: 'string' },
       },
-    },
-  },
-});
+      required: ['title', 'summary', 'scanned', 'issues', 'link_text'],
+    }),
+  };
+}
+
+let built: ReturnType<typeof build> | null = null;
+const models = () => (built ??= build(settings.cloud_model));
 
 export type Source = 'on_device' | 'in_cloud';
 
 /** Must be called from a click handler. Starts the Gemini Nano download if needed. */
 export function initDevice(onProgress: (fraction: number) => void): Promise<void> {
-  return models.normal.initializeDeviceModel(onProgress);
+  return models().normal.initializeDeviceModel(onProgress);
 }
 
 export async function deviceAvailability(): Promise<string> {
@@ -84,6 +127,8 @@ export async function deviceAvailability(): Promise<string> {
   if (!lm) return 'unsupported';
   return lm.availability({ expectedInputs: [{ type: 'image' }], expectedOutputs: [{ type: 'text', languages: ['en'] }] });
 }
+
+// ---------- prompts ----------
 
 function context(img: PageImage, pageTitle: string): string {
   const lines = [`Page title: ${pageTitle}`];
@@ -105,7 +150,8 @@ Classify the image:
 - complex: a chart, graph, map, diagram, infographic or table that needs a long description
 Set has_people to true if any person or face is visible. Set has_text to true if the image contains words or numbers a reader needs.
 Write alt text for a screen reader user: specific, under 125 characters, no "image of". Use the page context. For decorative images the alt is "".`;
-  const result = await (strictPrivacy ? models.strict : models.normal).generateContent([prompt, part]);
+  const m = models();
+  const result = await (strictPrivacy ? m.strict : m.normal).generateContent([prompt, part]);
   const parsed = JSON.parse(result.response.text()) as Classification;
   return { ...parsed, source: (result.response.inferenceSource ?? 'in_cloud') as Source };
 }
@@ -117,6 +163,21 @@ ${context(img, pageTitle)}
 Write for a blind reader using a screen reader.
 alt: one sentence under 125 characters with the main takeaway, not a list of colors.
 long_description: plain-language description of everything the image shows. For charts give the title, axes and every value you can read. For infographics and screenshots give all the text in reading order. Do not guess values you cannot read; say they are unreadable.`;
-  const result = await describer.generateContent([prompt, part]);
+  const result = await models().describer.generateContent([prompt, part]);
   return { ...(JSON.parse(result.response.text()) as { alt: string; long_description: string }), source: 'in_cloud' as Source };
+}
+
+export interface PdfReview { title: string; summary: string; scanned: boolean; issues: string[]; link_text: string }
+
+export async function reviewPdf(base64: string, linkText: string, pageTitle: string): Promise<PdfReview> {
+  const prompt = `This PDF is linked from the web page "${pageTitle}" with the link text "${linkText}".
+Review it for people who use screen readers or have low vision.
+title: a short, descriptive document title.
+summary: two plain sentences on what the document is and who it is for.
+scanned: true if the pages look like scanned images rather than real text.
+issues: up to 5 specific accessibility problems you can see, such as text that is only an image, form fields with no labels, tables without headers, meaning shown only by color, low contrast, images that need descriptions. Empty if none.
+link_text: better link text for the page, naming the document and ending with "(PDF)".`;
+  const part: Part = { type: 'inlineData', inlineData: { mimeType: 'application/pdf', data: base64 } };
+  const result = await models().pdf.generateContent([prompt, part]);
+  return JSON.parse(result.response.text()) as PdfReview;
 }

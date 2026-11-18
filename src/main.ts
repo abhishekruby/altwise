@@ -1,6 +1,7 @@
 import type { Part } from 'firebase/ai';
-import { classify, describe, deviceAvailability, initDevice, type Source } from './ai.ts';
+import { classify, describe, deviceAvailability, initDevice, loadSettings, reviewPdf, settings, type PdfReview, type Source } from './ai.ts';
 import { applyAltOnPage, collectFromPage, highlightOnPage, type PdfLink } from './page.ts';
+import { pdfFacts, vagueLinkText, type PdfFacts } from './pdf.ts';
 import {
   GRADE_LABEL, gradeAlt, needsAI, ruleDecorative, shouldEscalate, tidyAlt,
   type AltGrade, type Kind, type PageImage,
@@ -24,8 +25,17 @@ interface Item {
 const $ = <T extends HTMLElement>(sel: string) => document.querySelector(sel) as T;
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
+interface PdfItem {
+  link: PdfLink;
+  status: 'queued' | 'working' | 'done' | 'error';
+  facts?: PdfFacts;
+  review?: PdfReview;
+  sizeKb?: number;
+  note?: string;
+}
+
 let items: Item[] = [];
-let pdfs: PdfLink[] = [];
+let pdfs: PdfItem[] = [];
 let page = { title: '', url: '' };
 let tabId = 0;
 let filter: 'todo' | 'all' = 'todo';
@@ -113,7 +123,7 @@ async function scan() {
     const [{ result }] = await chrome.scripting.executeScript({ target: { tabId }, func: collectFromPage });
     if (!result) throw new Error('Could not read this page.');
     page = { title: result.title, url: result.url };
-    pdfs = result.pdfs;
+    pdfs = result.pdfs.map((link) => ({ link, status: 'queued' }));
 
     items = result.images.map((img): Item => {
       const grade = gradeAlt(img.alt);
@@ -130,13 +140,24 @@ async function scan() {
     filter = 'todo';
     render();
 
-    const queue = items.filter((i) => i.status === 'queued');
+    const waiting = items.filter((i) => i.status === 'queued');
+    const queue = waiting.slice(0, settings.max_images);
+    for (const extra of waiting.slice(settings.max_images)) {
+      extra.status = 'error';
+      extra.note = `Not checked: this scan stops at ${settings.max_images} images`;
+    }
+    const steps = queue.length + pdfs.length;
     for (const [n, item] of queue.entries()) {
-      setProgress(`Checking image ${n + 1} of ${queue.length}`, n / queue.length);
+      setProgress(`Checking image ${n + 1} of ${queue.length}`, n / steps);
       await processItem(item);
       render();
     }
-    setProgress(queue.length ? `Done. ${queue.length} images checked.` : 'Nothing to fix on this page.', 1);
+    for (const [n, p] of pdfs.entries()) {
+      setProgress(`Checking PDF ${n + 1} of ${pdfs.length} in the cloud`, (queue.length + n) / steps);
+      await processPdf(p);
+      render();
+    }
+    setProgress(steps ? `Done. ${queue.length} images and ${pdfs.length} PDFs checked.` : 'Nothing to fix on this page.', 1);
   } catch (e) {
     $('#error').textContent = e instanceof Error ? e.message : String(e);
     setProgress('', 0);
@@ -158,7 +179,7 @@ async function processItem(item: Item) {
     item.hasPeople = c.has_people;
     item.suggestion = c.kind === 'decorative' ? '' : tidyAlt(c.alt);
 
-    if (shouldEscalate(c)) {
+    if (shouldEscalate(c, settings.escalate_text_images)) {
       item.note = c.kind === 'complex' ? 'Chart or diagram: sent to cloud for a full description' : 'Contains text: sent to cloud to read it';
       render();
       const d = await describe(item.img, part, page.title);
@@ -176,6 +197,35 @@ async function processItem(item: Item) {
   } catch (e) {
     item.status = 'error';
     item.note = errorText(e);
+  }
+}
+
+const toBase64 = (buf: ArrayBuffer) => new Promise<string>((resolve, reject) => {
+  const r = new FileReader();
+  r.onload = () => resolve(String(r.result).split(',')[1]);
+  r.onerror = () => reject(r.error);
+  r.readAsDataURL(new Blob([buf]));
+});
+
+/** Structure checks run locally on the bytes; the content review needs the cloud (PDF input is cloud only). */
+async function processPdf(p: PdfItem) {
+  p.status = 'working';
+  render();
+  try {
+    const res = await fetch(p.link.href);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const buf = await res.arrayBuffer();
+    p.sizeKb = Math.round(buf.byteLength / 1024);
+    p.facts = await pdfFacts(buf);
+    if (buf.byteLength > settings.pdf_max_mb * 1024 * 1024) {
+      p.note = `Larger than ${settings.pdf_max_mb} MB, so only the structure was checked`;
+    } else {
+      p.review = await reviewPdf(await toBase64(buf), p.link.text, page.title);
+    }
+    p.status = 'done';
+  } catch (e) {
+    p.status = 'error';
+    p.note = errorText(e);
   }
 }
 
@@ -273,11 +323,50 @@ function card(i: Item): string {
   return `<article class="card status-${i.status}">${head}${body}</article>`;
 }
 
+function pdfChecks(p: PdfItem): [string, boolean][] {
+  const f = p.facts!;
+  return [
+    ['Real text, not a scanned image', f.hasText && !p.review?.scanned],
+    ['Tagged for screen readers', f.tagged],
+    ['Has a descriptive title', f.title],
+    ['Language is set', f.lang],
+    ['Link text names the document', !vagueLinkText(p.link.text)],
+  ];
+}
+
+const pdfPasses = (p: PdfItem) => p.status === 'done' && pdfChecks(p).every(([, ok]) => ok);
+
+function pdfCard(p: PdfItem, n: number): string {
+  const name = p.link.text || p.link.href.split('/').pop() || p.link.href;
+  const head = `<div class="pdf-head"><a href="${esc(p.link.href)}" target="_blank" rel="noopener">${esc(name)}</a>
+    ${p.review ? '<span class="badge cloud" title="Read by Gemini in the cloud. PDF input is cloud only.">Cloud</span>' : ''}
+    ${p.sizeKb ? `<span class="size">${p.sizeKb} KB</span>` : ''}</div>`;
+  if (p.status === 'queued') return `<article class="card">${head}<div class="state">Waiting</div></article>`;
+  if (p.status === 'working') return `<article class="card">${head}<div class="state working">Reading PDF…</div></article>`;
+  if (p.status === 'error') return `<article class="card">${head}<div class="note">${esc(p.note ?? '')}</div></article>`;
+
+  const checks = pdfChecks(p).map(([label, ok]) =>
+    `<li class="${ok ? 'pass' : 'fail'}"><span aria-hidden="true">${ok ? '✓' : '✕'}</span> ${label}<span class="sr"> ${ok ? 'passes' : 'needs a fix'}</span></li>`).join('');
+  const r = p.review;
+  const review = r ? `
+    <p class="summary">${esc(r.summary)}</p>
+    ${r.issues.length ? `<details><summary>${r.issues.length} problem${r.issues.length > 1 ? 's' : ''} inside the document</summary><ul>${r.issues.map((i) => `<li>${esc(i)}</li>`).join('')}</ul></details>` : ''}
+    <label class="field-label" for="pdf-link-${n}">Suggested link text</label>
+    <textarea id="pdf-link-${n}" data-pdf="${n}" rows="1">${esc(r.link_text)}</textarea>
+    <div class="note">Suggested title: ${esc(r.title)}</div>
+    <div class="actions"><button data-act="copy-pdf" data-pdf="${n}">Copy link HTML</button></div>` : p.note ? `<div class="note">${esc(p.note)}</div>` : '';
+  return `<article class="card">${head}<ul class="checks">${checks}</ul>${review}</article>`;
+}
+
 function renderPdfs() {
-  const box = $('#pdfs');
-  box.hidden = pdfs.length === 0;
-  $('#pdf-count').textContent = String(pdfs.length);
-  $('#pdf-list').innerHTML = pdfs.map((p) => `<li><a href="${esc(p.href)}" target="_blank" rel="noopener">${esc(p.text || p.href.split('/').pop() || p.href)}</a></li>`).join('');
+  $('#pdfs').hidden = pdfs.length === 0;
+  const done = pdfs.filter((p) => p.status === 'done');
+  $('#pdf-count').textContent = done.length ? `${pdfs.filter(pdfPasses).length} of ${pdfs.length} pass` : String(pdfs.length);
+  $('#pdf-list').innerHTML = pdfs.map(pdfCard).join('');
+}
+
+function pdfLinkHtml(p: PdfItem): string {
+  return `<a href="${esc(p.link.href)}">${esc(p.review?.link_text ?? p.link.text)}${p.sizeKb ? `, ${p.sizeKb} KB` : ''}</a>`;
 }
 
 // ---------- export ----------
@@ -296,6 +385,11 @@ function csv(): string {
   for (const i of items) {
     rows.push([page.url, i.img.src, i.img.alt ?? '', GRADE_LABEL[i.grade], i.kind ?? '', i.suggestion ?? '', i.longDescription ?? '',
       [...new Set(i.sources)].join('+') || 'rules only', i.status]);
+  }
+  for (const p of pdfs) {
+    const failed = p.facts ? pdfChecks(p).filter(([, ok]) => !ok).map(([l]) => l).join('; ') : p.note ?? '';
+    rows.push([page.url, p.link.href, p.link.text, failed, 'pdf', p.review?.link_text ?? '', [p.review?.summary, ...(p.review?.issues ?? [])].filter(Boolean).join(' '),
+      p.review ? 'in_cloud' : 'rules only', p.status]);
   }
   return rows.map((r) => r.map(q).join(',')).join('\n');
 }
@@ -329,6 +423,20 @@ $('#copy-all').addEventListener('click', async (e) => {
 $('#strict').addEventListener('change', (e) => {
   strict = (e.target as HTMLInputElement).checked;
   chrome.storage.local.set({ strict });
+});
+
+$('#pdf-list').addEventListener('input', (e) => {
+  const t = e.target as HTMLTextAreaElement;
+  const p = pdfs[Number(t.dataset.pdf)];
+  if (p?.review) p.review.link_text = t.value;
+});
+
+$('#pdf-list').addEventListener('click', async (e) => {
+  const btn = (e.target as HTMLElement).closest('button');
+  const p = btn && pdfs[Number(btn.dataset.pdf)];
+  if (!btn || !p) return;
+  await navigator.clipboard.writeText(pdfLinkHtml(p));
+  flash(btn, 'Copied');
 });
 
 $('#list').addEventListener('input', (e) => {
@@ -367,3 +475,4 @@ chrome.storage.local.get('strict').then((v) => {
   ($('#strict') as HTMLInputElement).checked = strict;
 });
 refreshDevice();
+loadSettings();

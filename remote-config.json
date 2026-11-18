@@ -1,0 +1,24 @@
+{
+  "parameters": {
+    "cloud_model": {
+      "defaultValue": { "value": "gemini-3.5-flash-lite" },
+      "description": "Cloud Gemini model for fallback classification, long descriptions and PDF review",
+      "valueType": "STRING"
+    },
+    "max_images": {
+      "defaultValue": { "value": "40" },
+      "description": "Most images checked by AI in one scan (CPU inference takes about 20 s per image)",
+      "valueType": "NUMBER"
+    },
+    "escalate_text_images": {
+      "defaultValue": { "value": "true" },
+      "description": "Send informative images with text (no people) to the cloud to read small text",
+      "valueType": "BOOLEAN"
+    },
+    "pdf_max_mb": {
+      "defaultValue": { "value": "15" },
+      "description": "Largest PDF sent to the cloud for content review; bigger files get structure checks only",
+      "valueType": "NUMBER"
+    }
+  }
+}
