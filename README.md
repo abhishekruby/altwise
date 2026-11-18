@@ -2,7 +2,7 @@
 
 Altwise is a Chrome extension for the people who keep school and town websites running. Open it on any page and it finds every image with missing or weak alt text, writes a better version, and checks the PDFs the page links to. You review each suggestion, accept it, and copy the fixed HTML into your CMS.
 
-It uses Firebase AI Logic hybrid inference. Gemini Nano runs on your computer, looks at every image first and decides what the cloud is allowed to see. Photos of people stay on the computer. Charts, maps and posters full of text go to Gemini in the cloud, because reading small numbers needs a bigger model, but only after Nano has checked a second time that nobody is in them. Linked PDFs go to the cloud too, since PDF input is cloud only.
+It uses Firebase AI Logic hybrid inference. Gemini Nano runs on your computer, looks at every image first and decides what the cloud is allowed to see. Photos of people stay on the computer. Charts, maps and posters full of text go to Gemini in the cloud, because reading small numbers needs a bigger model. When a flyer full of text also has a small photo of children in the corner, Altwise paints the photo grey on your computer and sends the cloud only the rest. Linked PDFs go to the cloud too, since PDF input is cloud only.
 
 ## Why this exists
 
@@ -20,8 +20,10 @@ Every image goes through three steps, and the side panel shows which one handled
 |---|---|---|
 | Rules | Your browser, no AI | Skips hidden, tiny and spacer images. Grades existing alt text: missing, file name, generic ("chart", "logo"), too long, starts with "image of". |
 | Gemini Nano | On device | Classifies the image as decorative, informative, functional (a link) or complex, notes whether people or text are visible, and writes alt text using the page heading, caption, link target and nearby paragraph. |
-| Gemini Nano, second look | On device | Runs only when an image is about to go to the cloud. One narrow question: is any person visible anywhere, including small faces inside a poster? Unsure counts as yes. If the check fails, the image stays local. |
-| Gemini (cloud) | Firebase AI Logic | Only for complex images and informative images with text that passed the second look. Writes a short alt and a full long description with every value it can read. Runs alongside Nano, so Nano keeps reading the next image meanwhile. |
+| Photo check | Your browser, no AI | Before anything leaves the computer, the image is split into 16 px tiles. In drawings (charts, maps, tables, icons) neighbouring pixels are mostly identical. In photographs they almost never are, in colour or black and white. A drawing cannot show a real person, so it may go to the cloud even if Nano thought it saw stick figures. |
+| Gemini Nano, second look | On device | Runs when an image that contains a photo is about to go to the cloud. One narrow question: is any person visible anywhere? Unsure counts as yes, and so does a failed check. |
+| Blank out the photo | Your browser, no AI | A flyer with people in a small photo (under 40% of the image) gets that photo painted grey, with a margin, on the computer. The result is checked again and only sent if no photographic pixels are left. The card shows exactly what the cloud saw. A photo with a caption stays on the device. |
+| Gemini (cloud) | Firebase AI Logic | Only for charts and text-heavy images that passed the checks above. Writes a short alt and a full long description with every value it can read. Runs alongside Nano, so Nano keeps reading the next image meanwhile. |
 
 PDFs get structure checks on the device (tagged, descriptive title, language, real text or a scan, vague link text like "click here"). The content review goes to the cloud, because PDF input is cloud only.
 
@@ -66,6 +68,8 @@ Without this, Altwise uses the cloud for everything and says so. To run on devic
 ### Demo page
 
 **Live demo page: https://abhishekruby.github.io/altwise/demo/** (open it, then click the Altwise icon and scan).
+
+**Privacy test page: https://abhishekruby.github.io/altwise/demo/flyers.html.** Three school flyers hide a small photo of children. Altwise keeps those photos on the device and sends the cloud a copy with the photo painted grey, so the event details still get read. A bus timetable, a chart and a cartoon poster go to the cloud as they are.
 
 [demo/](demo/) is a fictional school newsletter with the usual mistakes on purpose: a file name as alt text, a chart with alt="chart", a map and a pie chart with no alt, a librarian photo marked decorative, a scanned PDF behind a "click here" link. Serve the repo with `npx vite` and open `http://localhost:5173/demo/`.
 

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { gradeAlt, needsAI, photoTiles, ruleDecorative, shouldEscalate, tidyAlt, type PageImage } from './rules.ts';
+import { gradeAlt, needsAI, photoRegions, redactable, ruleDecorative, tidyAlt, wantsCloud, type PageImage } from './rules.ts';
 
 assert.equal(gradeAlt(null), 'missing');
 assert.equal(gradeAlt('  '), 'empty');
@@ -31,26 +31,25 @@ assert.equal(needsAI(base, 'empty'), true);
 assert.equal(needsAI({ ...base, width: 40, height: 40 }, 'empty'), false);
 assert.equal(needsAI(base, 'missing'), true);
 
-assert.equal(shouldEscalate({ kind: 'complex', has_people: false, has_text: true, alt: '' }), true);
-assert.equal(shouldEscalate({ kind: 'complex', has_people: true, has_text: true, alt: '' }), false);
-assert.equal(shouldEscalate({ kind: 'informative', has_people: false, has_text: false, alt: '' }), false);
-assert.equal(shouldEscalate({ kind: 'informative', has_people: false, has_text: true, alt: '' }), true);
-assert.equal(shouldEscalate({ kind: 'functional', has_people: false, has_text: true, alt: '' }), false); // logo link
+assert.equal(wantsCloud({ kind: 'complex', has_people: false, has_text: true, alt: '' }), true);
+assert.equal(wantsCloud({ kind: 'informative', has_people: false, has_text: false, alt: '' }), false);
+assert.equal(wantsCloud({ kind: 'informative', has_people: true, has_text: true, alt: '' }), true);
+assert.equal(wantsCloud({ kind: 'informative', has_people: false, has_text: true, alt: '' }, false), false);
+assert.equal(wantsCloud({ kind: 'functional', has_people: false, has_text: true, alt: '' }), false); // logo link
 
-// Stick figures or icons in a drawing are not a photo of a person, so the chart can still go to the cloud.
-assert.equal(shouldEscalate({ kind: 'complex', has_people: true, has_text: true, alt: '' }, true, false), true);
-assert.equal(shouldEscalate({ kind: 'informative', has_people: true, has_text: true, alt: '' }, true, true), false);
-
-// photoTiles: flat drawing with a hard-edged shape = 0; any noisy (photo-like) patch, colour or grey > 0.
+// photoRegions: flat drawing with a hard-edged shape = 0; any noisy (photo-like) patch, colour or grey > 0.
 const W = 64, H = 64;
 const flat = new Uint8ClampedArray(W * H * 4).fill(255);
 for (let y = 20; y < 40; y++) for (let x = 10; x < 50; x++) { const i = (y * W + x) * 4; flat[i] = 47; flat[i + 1] = 91; flat[i + 2] = 211; }
-assert.equal(photoTiles(flat, W, H), 0);
+assert.deepEqual(photoRegions(flat, W, H), []);
 let seed = 7;
 const rnd = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
 const grey = flat.slice();
 for (let y = 0; y < 16; y++) for (let x = 48; x < 64; x++) { const i = (y * W + x) * 4, v = 40 + rnd() * 180; grey[i] = grey[i + 1] = grey[i + 2] = v; }
-assert.equal(photoTiles(grey, W, H), 1);
+assert.deepEqual(photoRegions(grey, W, H), [[48, 0]]);
+assert.equal(redactable(1, W, H), true); // 1 of 16 tiles is photo: blank it out
+assert.equal(redactable(12, W, H), false); // mostly photo: keep it local
+assert.equal(redactable(0, W, H), false);
 
 assert.equal(tidyAlt('image of a red bus'), 'A red bus');
 const long = tidyAlt('word '.repeat(40));

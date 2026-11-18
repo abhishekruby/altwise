@@ -3,7 +3,7 @@ import { classify, describe, deviceAvailability, hasPeopleOnDevice, initDevice, 
 import { applyAltOnPage, clearMarks, collectFromPage, highlightOnPage, markOnPage, type PdfLink } from './page.ts';
 import { pdfFacts, vagueLinkText, type PdfFacts } from './pdf.ts';
 import {
-  GRADE_LABEL, gradeAlt, needsAI, photoTiles, ruleDecorative, shouldEscalate, tidyAlt,
+  GRADE_LABEL, gradeAlt, needsAI, photoRegions, redactable, ruleDecorative, tidyAlt, wantsCloud,
   type AltGrade, type Kind, type PageImage,
 } from './rules.ts';
 
@@ -21,6 +21,7 @@ interface Item {
   sources: Source[]; // every place this image was processed
   ms: { device?: number; cloud?: number };
   thumb?: string;
+  cloudView?: string; // what the cloud was sent, when a photo of people was blanked out first
 }
 
 const $ = <T extends HTMLElement>(sel: string) => document.querySelector(sel) as T;
@@ -99,6 +100,16 @@ async function mayUseCloud(): Promise<boolean> {
 
 // ---------- image loading ----------
 
+/** Scales a canvas down to fit `max`, for small previews. */
+function toCanvasFrom(src: HTMLCanvasElement, max: number): HTMLCanvasElement {
+  const scale = Math.min(1, max / Math.max(src.width, src.height));
+  const c = document.createElement('canvas');
+  c.width = Math.round(src.width * scale);
+  c.height = Math.round(src.height * scale);
+  c.getContext('2d')!.drawImage(src, 0, 0, c.width, c.height);
+  return c;
+}
+
 /**
  * Draws the image scaled to fit `max`. With `square`, it is centred on a white square instead:
  * Gemini Nano stretches every image to a square, which squashes logos, banners and wide charts.
@@ -120,8 +131,8 @@ function toCanvas(el: HTMLImageElement, max: number, square = false): HTMLCanvas
 const jpeg = (c: HTMLCanvasElement): Part => ({ type: 'inlineData', inlineData: { mimeType: 'image/jpeg', data: c.toDataURL('image/jpeg', 0.85).split(',')[1] } });
 
 /** Fetches the image once: a padded square for Gemini Nano, the natural shape for the cloud, a thumbnail,
- * and whether any part of it looks like a photograph (drawings cannot show a real person). */
-async function loadImage(src: string): Promise<{ part: Part; cloudPart: Part; thumb: string; hasPhoto: boolean }> {
+ * and where any photographic areas are (drawings cannot show a real person). */
+async function loadImage(src: string) {
   const res = await fetch(src);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const url = URL.createObjectURL(await res.blob());
@@ -129,15 +140,49 @@ async function loadImage(src: string): Promise<{ part: Part; cloudPart: Part; th
     const el = new Image();
     el.src = url;
     await el.decode();
-    const square = toCanvas(el, 768, true);
-    const pixels = square.getContext('2d')!.getImageData(0, 0, square.width, square.height).data;
+    const natural = toCanvas(el, 1536);
+    const pixels = natural.getContext('2d')!.getImageData(0, 0, natural.width, natural.height).data;
     return {
-      part: jpeg(square), cloudPart: jpeg(toCanvas(el, 1536)), thumb: toCanvas(el, 160).toDataURL('image/jpeg', 0.8),
-      hasPhoto: photoTiles(pixels, square.width, square.height) > 0,
+      part: jpeg(toCanvas(el, 768, true)), natural, thumb: toCanvas(el, 160).toDataURL('image/jpeg', 0.8),
+      regions: photoRegions(pixels, natural.width, natural.height),
     };
   } finally {
     URL.revokeObjectURL(url);
   }
+}
+
+/**
+ * Paints every photographic area grey, so a flyer can go to the cloud without the photo of people in it.
+ * Nearby photo tiles are grouped and each group's whole bounding box is covered, plus a two-tile margin,
+ * which also hides the flatter parts of the photo (a wall, the sky) that the tile check does not flag.
+ * Returns null if anything photographic is still left: then the image stays on the device.
+ */
+function redact(src: HTMLCanvasElement, regions: [number, number][], tile = 16): HTMLCanvasElement | null {
+  const key = (x: number, y: number) => `${x},${y}`;
+  const todo = new Set(regions.map(([x, y]) => key(x, y)));
+  const out = document.createElement('canvas');
+  out.width = src.width;
+  out.height = src.height;
+  const ctx = out.getContext('2d')!;
+  ctx.drawImage(src, 0, 0);
+  ctx.fillStyle = '#9aa0a6';
+  for (const [sx, sy] of regions) {
+    if (!todo.delete(key(sx, sy))) continue;
+    let [x0, y0, x1, y1] = [sx, sy, sx, sy];
+    const stack = [[sx, sy]];
+    while (stack.length) {
+      const [x, y] = stack.pop()!;
+      x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y);
+      for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+        const k = key(x + dx * tile, y + dy * tile);
+        if (todo.delete(k)) stack.push([x + dx * tile, y + dy * tile]);
+      }
+    }
+    // Two tiles of margin: the smooth edge of a photo (sky, a wall) can be two tiles wide and is not flagged.
+    ctx.fillRect(x0 - 2 * tile, y0 - 2 * tile, x1 - x0 + 5 * tile, y1 - y0 + 5 * tile);
+  }
+  const left = photoRegions(ctx.getImageData(0, 0, out.width, out.height).data, out.width, out.height);
+  return left.length ? null : out;
 }
 
 // ---------- cloud queue ----------
@@ -256,7 +301,7 @@ const secs = (ms: number) => `${(ms / 1000).toFixed(ms < 10000 ? 1 : 0)} s`;
 
 function routeLabel(item: Item): { text: string; tone: 'device' | 'cloud' } {
   const cloud = item.sources.includes('in_cloud');
-  const where = cloud ? (item.sources.includes('on_device') ? 'Nano → Cloud' : 'Cloud') : 'On device';
+  const where = cloud ? (item.cloudView ? 'Photo blanked → Cloud' : item.sources.includes('on_device') ? 'Nano → Cloud' : 'Cloud') : 'On device';
   return { text: `${where} · ${KIND_LABEL[item.kind!]}`, tone: cloud ? 'cloud' : 'device' };
 }
 
@@ -284,40 +329,56 @@ async function processItem(item: Item): Promise<{ cloud?: Promise<void> }> {
   render();
   await inPage(markOnPage, [item.img.id, 'Reading…', 'working', true]);
   try {
-    const { part, cloudPart, thumb, hasPhoto } = await loadImage(item.img.src);
+    const { part, natural, thumb, regions } = await loadImage(item.img.src);
+    const hasPhoto = regions.length > 0;
     item.thumb = thumb;
+    item.cloudView = undefined;
     let t = performance.now();
     const c = await classify(item.img, part, page.title, strict);
     item.ms[c.source === 'on_device' ? 'device' : 'cloud'] = performance.now() - t;
     item.sources.push(c.source);
     item.kind = c.kind;
+    // Stick figures and icons in a drawing are not a photo of anyone.
     item.hasPeople = c.has_people && hasPhoto;
     item.suggestion = c.kind === 'decorative' ? '' : tidyAlt(c.alt);
     item.note = item.hasPeople
       ? (c.source === 'on_device' ? 'People in photo: kept on this device' : 'People in photo, read in the cloud because Gemini Nano is not ready')
       : '';
 
-    if (shouldEscalate(c, settings.escalate_text_images, hasPhoto)) {
-      // A drawing has no photo of anyone to protect. Anything photographic gets a second look first.
+    if (wantsCloud(c, settings.escalate_text_images)) {
+      let send = natural;
+      let why = hasPhoto ? 'Read in the cloud because Gemini Nano is not ready' : 'A drawing, no photo of anyone';
+      let photoSeen = '';
       if (hasPhoto && c.source === 'on_device') {
-        t = performance.now();
-        // Fail closed: if the check itself breaks, treat the image as having people in it.
-        const people = await hasPeopleOnDevice(part).catch(() => true);
-        item.ms.device = (item.ms.device ?? 0) + performance.now() - t;
+        let people = c.has_people;
+        if (!people) {
+          // The first look may miss a small face. Fail closed: if this check breaks, assume a person.
+          t = performance.now();
+          people = await hasPeopleOnDevice(part).catch(() => true);
+          item.ms.device = (item.ms.device ?? 0) + performance.now() - t;
+          why = 'Gemini Nano checked twice: no people';
+        }
         if (people) {
           item.hasPeople = true;
-          item.note = 'Gemini Nano found a person on a second look, so this stays on the device';
-          await finish(item);
-          return {};
+          const blanked = redactable(regions.length, natural.width, natural.height) ? redact(natural, regions) : null;
+          if (!blanked) {
+            if (!c.has_people) item.note = 'Gemini Nano found a person on a second look, so this stays on the device';
+            await finish(item);
+            return {};
+          }
+          send = blanked;
+          photoSeen = item.suggestion ?? '';
+          why = 'Photo of people blanked out on this device';
+          item.cloudView = toCanvasFrom(blanked, 320).toDataURL('image/jpeg', 0.8);
         }
       }
-      const why = hasPhoto ? 'Gemini Nano checked twice: no people' : 'A drawing, no photo of anyone';
       item.note = `${why}. Sent to the cloud ${c.kind === 'complex' ? 'for a full description' : 'to read the text'}.`;
       render();
       await inPage(markOnPage, [item.img.id, 'Sending to cloud…', 'working', false]);
+      const cloudPart = jpeg(send);
       const cloud = cloudSlot(async () => {
         const t2 = performance.now();
-        const d = await describe(item.img, cloudPart, page.title);
+        const d = await describe(item.img, cloudPart, page.title, photoSeen);
         item.ms.cloud = (item.ms.cloud ?? 0) + performance.now() - t2;
         item.sources.push(d.source);
         item.suggestion = tidyAlt(d.alt);
@@ -492,6 +553,7 @@ function card(i: Item): string {
     body = `<label class="field-label" for="alt-${id}">Suggested alt text${i.kind === 'decorative' ? ' (empty, decorative)' : ''}</label>
       <textarea id="alt-${id}" data-id="${id}" rows="2" maxlength="250">${esc(i.suggestion ?? '')}</textarea>
       ${i.longDescription ? `<details><summary>Long description</summary><p>${esc(i.longDescription)}</p></details>` : ''}
+      ${i.cloudView ? `<details><summary>What the cloud saw</summary><img class="cloud-view" src="${i.cloudView}" alt="The image as sent to the cloud, with the photo of people painted grey"></details>` : ''}
       <div class="actions">
         ${i.status === 'accepted' ? `<span class="done">Accepted</span>` : btn('accept', 'Accept', true)}
         ${btn('listen', 'Listen')}

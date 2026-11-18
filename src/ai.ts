@@ -207,9 +207,12 @@ Answer people: true or false. If you are unsure, answer true.`;
   return data.people;
 }
 
-export async function describe(img: PageImage, part: Part, pageTitle: string) {
+export async function describe(img: PageImage, part: Part, pageTitle: string, blankedPhoto = '') {
+  const blanked = blankedPhoto ? `
+A photo of people in this image was painted grey on the user's device to protect their privacy. Do not describe the grey area.
+On the device, that photo was described as: "${blankedPhoto}". Mention it in a few words where it fits.` : '';
   const prompt = `This image is on a public school or local government web page.
-${context(img, pageTitle)}
+${context(img, pageTitle)}${blanked}
 
 Write for a blind reader using a screen reader.
 alt: one sentence under 125 characters with the main takeaway, not a list of colors.

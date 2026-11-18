@@ -76,28 +76,26 @@ export interface Classification {
 }
 
 /**
- * Privacy rule: a photo of a person never goes to the cloud.
- * Charts, infographics and text-heavy images do, because the on-device model
- * sees them at 768x768 and cannot read small numbers reliably.
+ * Does this image need the bigger cloud model? Charts, infographics and text-heavy images do, because
+ * the on-device model sees them at 768x768 and cannot read small numbers reliably.
  * Logos and link images contain text too, but their alt names the destination, so they stay local.
- * `hasPhoto` comes from photoTiles(): a drawing with no photographic pixels cannot show a real person,
- * even if the model saw stick figures or icons of people in it.
+ * Whether the image may actually leave the device is decided separately, by the privacy checks.
  */
-export function shouldEscalate(c: Classification, escalateText = true, hasPhoto = true): boolean {
-  if (c.has_people && hasPhoto) return false;
+export function wantsCloud(c: Classification, escalateText = true): boolean {
   return c.kind === 'complex' || (escalateText && c.has_text && c.kind === 'informative');
 }
 
 /**
- * Counts 16 px tiles that look like part of a photograph. In drawn graphics (charts, maps, text,
- * icons) most neighbouring pixels are identical, even around anti-aliased edges. In photos, sensor
- * noise and texture make identical neighbours rare, in colour and in black and white alike.
- * A tiny photo pasted into a flyer still produces a few such tiles.
+ * Finds 16 px tiles that look like part of a photograph and returns their top-left corners.
+ * In drawn graphics (charts, maps, text, icons) most neighbouring pixels are identical, even around
+ * anti-aliased edges. In photos, sensor noise and texture make identical neighbours rare, in colour
+ * and in black and white alike. A drawing with no such tiles cannot show a real person, and a small
+ * photo pasted into a flyer still produces a few, which tells us exactly where it is.
  * ponytail: a heuristic. JPEG-compressed charts and gradients can count as photo-like; that only
- * costs one extra on-device check, never a privacy leak.
+ * costs one extra on-device check or keeps an image local, never a privacy leak.
  */
-export function photoTiles(rgba: Uint8ClampedArray, width: number, height: number, tile = 16): number {
-  let photo = 0;
+export function photoRegions(rgba: Uint8ClampedArray, width: number, height: number, tile = 16): [number, number][] {
+  const found: [number, number][] = [];
   for (let ty = 0; ty + tile <= height; ty += tile) {
     for (let tx = 0; tx + tile <= width; tx += tile) {
       let same = 0, pairs = 0;
@@ -112,10 +110,16 @@ export function photoTiles(rgba: Uint8ClampedArray, width: number, height: numbe
           }
         }
       }
-      if (same / pairs < 0.35 && levels.size >= 32) photo++;
+      if (same / pairs < 0.35 && levels.size >= 32) found.push([tx, ty]);
     }
   }
-  return photo;
+  return found;
+}
+
+/** A flyer with a small photo can have the photo blanked out. A photo with a caption cannot. */
+export function redactable(photoTiles: number, width: number, height: number, tile = 16): boolean {
+  const total = Math.floor(width / tile) * Math.floor(height / tile);
+  return photoTiles > 0 && total > 0 && photoTiles / total < 0.4;
 }
 
 /** Cleans model alt text: trims, drops "Image of", caps length at a word boundary. */

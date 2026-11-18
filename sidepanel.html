@@ -79,6 +79,7 @@
   details { margin-top: 8px; font-size: 13px; }
   details summary { cursor: pointer; color: var(--cloud); }
   details p { white-space: pre-wrap; margin: 6px 0 0; }
+  .cloud-view { display: block; max-width: 100%; margin-top: 6px; border: 1px solid var(--line); border-radius: 6px; }
   .actions { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; align-items: center; }
   .actions button { font-size: 13px; padding: 5px 9px; }
   .done { color: var(--device); font-weight: 600; font-size: 13px; margin-right: 4px; }
@@ -123,7 +124,7 @@
 <main>
   <p class="intro">Finds images with missing or weak alt text and writes better text. With Gemini Nano on this computer, photos of people are never sent anywhere.</p>
   <button id="scan">Scan this page</button>
-  <label class="toggle"><input type="checkbox" id="strict"> <span>Strict privacy: never fall back to the cloud. An image only leaves this computer after Gemini Nano has checked twice that no one is in it.</span></label>
+  <label class="toggle"><input type="checkbox" id="strict"> <span>Strict privacy: never fall back to the cloud. Only drawings, text and photos Gemini Nano has checked twice for people ever leave this computer.</span></label>
   <div class="progress" aria-hidden="true"><div id="progress-bar"></div></div>
   <div id="progress-text" role="status" aria-live="polite"></div>
   <div id="error" role="alert"></div>
