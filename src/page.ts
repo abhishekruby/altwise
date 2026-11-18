@@ -79,6 +79,35 @@ export function highlightOnPage(id: number): void {
   setTimeout(() => { img.style.outline = old; }, 2500);
 }
 
+/** Puts a small label on the image in the audited page so you can watch the routing happen. */
+export function markOnPage(id: number, text: string, tone: 'working' | 'device' | 'cloud' | 'rules', scroll: boolean): void {
+  const img = document.querySelector<HTMLImageElement>(`img[data-altwise-id="${id}"]`);
+  if (!img) return;
+  const colors = { working: '#e8590c', device: '#0d7a5f', cloud: '#2f5bd3', rules: '#5d6470' };
+  let tag = document.querySelector<HTMLElement>(`[data-altwise-tag="${id}"]`);
+  if (!tag) {
+    tag = document.createElement('div');
+    tag.dataset.altwiseTag = String(id);
+    tag.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(tag);
+  }
+  if (scroll) img.scrollIntoView({ behavior: 'instant', block: 'center' });
+  const r = img.getBoundingClientRect();
+  Object.assign(tag.style, {
+    position: 'absolute', left: `${r.left + scrollX + 8}px`, top: `${r.top + scrollY + 8}px`, zIndex: '2147483647',
+    background: colors[tone], color: '#fff', font: '600 12px/1.2 system-ui, sans-serif', padding: '5px 10px',
+    borderRadius: '999px', boxShadow: '0 2px 6px rgba(0,0,0,.35)', pointerEvents: 'none', whiteSpace: 'nowrap',
+  });
+  tag.textContent = text;
+  img.style.outline = `3px ${tone === 'working' ? 'dashed' : 'solid'} ${colors[tone]}`;
+  img.style.outlineOffset = '2px';
+}
+
+export function clearMarks(): void {
+  document.querySelectorAll('[data-altwise-tag]').forEach((e) => e.remove());
+  document.querySelectorAll<HTMLElement>('img[data-altwise-id]').forEach((i) => { i.style.outline = ''; });
+}
+
 export function applyAltOnPage(id: number, alt: string): void {
   const img = document.querySelector<HTMLImageElement>(`img[data-altwise-id="${id}"]`);
   if (img) img.setAttribute('alt', alt);

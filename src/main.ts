@@ -1,6 +1,6 @@
 import type { Part } from 'firebase/ai';
 import { classify, describe, deviceAvailability, initDevice, loadSettings, reviewPdf, settings, type PdfReview, type Source } from './ai.ts';
-import { applyAltOnPage, collectFromPage, highlightOnPage, type PdfLink } from './page.ts';
+import { applyAltOnPage, clearMarks, collectFromPage, highlightOnPage, markOnPage, type PdfLink } from './page.ts';
 import { pdfFacts, vagueLinkText, type PdfFacts } from './pdf.ts';
 import {
   GRADE_LABEL, gradeAlt, needsAI, ruleDecorative, shouldEscalate, tidyAlt,
@@ -38,7 +38,7 @@ let items: Item[] = [];
 let pdfs: PdfItem[] = [];
 let page = { title: '', url: '' };
 let tabId = 0;
-let filter: 'todo' | 'all' = 'todo';
+let filter: 'todo' | 'all' | 'pdf' = 'todo';
 let strict = false;
 let busy = false;
 
@@ -52,10 +52,10 @@ async function refreshDevice() {
   const chip = $('#device');
   const text: Record<string, string> = {
     available: 'Gemini Nano ready',
-    downloadable: downloadTried ? 'Gemini Nano not available here, using cloud' : 'Gemini Nano not downloaded yet',
-    downloading: 'Gemini Nano downloading, using cloud meanwhile',
-    unavailable: 'No on-device model here, using cloud',
-    unsupported: 'No on-device model here, using cloud',
+    downloadable: downloadTried ? 'No Nano here · using cloud' : 'Gemini Nano not downloaded',
+    downloading: 'Nano downloading · cloud for now',
+    unavailable: 'No Nano here · using cloud',
+    unsupported: 'No Nano here · using cloud',
   };
   chip.textContent = text[a] ?? a;
   chip.dataset.state = a === 'available' ? 'ok' : a === 'downloading' || (a === 'downloadable' && !downloadTried) ? 'wait' : 'off';
@@ -120,6 +120,7 @@ async function scan() {
       : await chrome.tabs.query({ active: true, currentWindow: true });
     if (!tab?.id || !/^https?:|^file:/.test(tab.url ?? '')) throw new Error('Open a web page first, then scan.');
     tabId = tab.id;
+    await inPage(clearMarks, []);
     const [{ result }] = await chrome.scripting.executeScript({ target: { tabId }, func: collectFromPage });
     if (!result) throw new Error('Could not read this page.');
     page = { title: result.title, url: result.url };
@@ -138,7 +139,9 @@ async function scan() {
       return { img, grade, status: 'queued', note: '', sources: [] };
     });
     filter = 'todo';
+    $('#empty').hidden = true;
     render();
+    for (const i of items.filter((i) => i.status === 'review')) await inPage(markOnPage, [i.img.id, 'Rules: alt=""', 'rules', false]);
 
     const waiting = items.filter((i) => i.status === 'queued');
     const queue = waiting.slice(0, settings.max_images);
@@ -167,9 +170,18 @@ async function scan() {
   }
 }
 
+async function inPage(func: (...a: never[]) => void, args: unknown[]) {
+  try {
+    await chrome.scripting.executeScript({ target: { tabId }, func: func as () => void, args: args as [] });
+  } catch {
+    // the tab navigated away; the panel keeps working
+  }
+}
+
 async function processItem(item: Item) {
   item.status = 'working';
   render();
+  await inPage(markOnPage, [item.img.id, 'Reading…', 'working', true]);
   try {
     const { part, thumb } = await loadImage(item.img.src);
     item.thumb = thumb;
@@ -182,6 +194,7 @@ async function processItem(item: Item) {
     if (shouldEscalate(c, settings.escalate_text_images)) {
       item.note = c.kind === 'complex' ? 'Chart or diagram: sent to cloud for a full description' : 'Contains text: sent to cloud to read it';
       render();
+      await inPage(markOnPage, [item.img.id, 'Sending to cloud…', 'working', false]);
       const d = await describe(item.img, part, page.title);
       item.sources.push(d.source);
       item.suggestion = tidyAlt(d.alt);
@@ -194,9 +207,13 @@ async function processItem(item: Item) {
       item.note = '';
     }
     item.status = 'review';
+    const cloud = item.sources.includes('in_cloud');
+    const label = cloud ? (item.sources.includes('on_device') ? 'Nano → Cloud' : 'Cloud') : 'On device';
+    await inPage(markOnPage, [item.img.id, `${label} · ${KIND_LABEL[item.kind!]}`, cloud ? 'cloud' : 'device', false]);
   } catch (e) {
     item.status = 'error';
     item.note = errorText(e);
+    await inPage(markOnPage, [item.img.id, 'Not checked', 'rules', false]);
   }
 }
 
@@ -257,6 +274,7 @@ function score(list: Item[], after: boolean): number {
 function render() {
   const total = items.length;
   $('#summary').hidden = total === 0;
+  $('#tabs').hidden = total === 0;
   if (!total) return;
 
   // Three tiers: rules only (no AI), Gemini Nano on this device, Gemini in the cloud.
@@ -277,8 +295,14 @@ function render() {
   const todo = items.filter((i) => !['skipped', 'fine', 'accepted'].includes(i.status));
   $('#tab-todo').textContent = `To fix (${todo.length})`;
   $('#tab-all').textContent = `All (${total})`;
-  $('#tab-todo').ariaSelected = String(filter === 'todo');
-  $('#tab-all').ariaSelected = String(filter === 'all');
+  $('#tab-pdf').textContent = `PDFs (${pdfs.length})`;
+  $('#tab-pdf').hidden = pdfs.length === 0;
+  for (const t of ['todo', 'all', 'pdf'] as const) $(`#tab-${t}`).ariaSelected = String(filter === t);
+  $('#list').hidden = filter === 'pdf';
+  $('#pdfs').hidden = filter !== 'pdf';
+  const reviewable = items.filter((i) => i.status === 'review').length;
+  $('#accept-all').textContent = reviewable ? `Accept all ${reviewable}` : 'Accept all';
+  $('#accept-all').toggleAttribute('disabled', !reviewable);
 
   const shown = filter === 'todo' ? todo : items;
   $('#list').innerHTML = shown.length ? shown.map(card).join('') : `<p class="empty">Everything on this list is fixed.</p>`;
@@ -359,7 +383,6 @@ function pdfCard(p: PdfItem, n: number): string {
 }
 
 function renderPdfs() {
-  $('#pdfs').hidden = pdfs.length === 0;
   const done = pdfs.filter((p) => p.status === 'done');
   $('#pdf-count').textContent = done.length ? `${pdfs.filter(pdfPasses).length} of ${pdfs.length} pass` : String(pdfs.length);
   $('#pdf-list').innerHTML = pdfs.map(pdfCard).join('');
@@ -413,6 +436,14 @@ async function flash(btn: HTMLElement, text: string) {
 $('#scan').addEventListener('click', scan);
 $('#tab-todo').addEventListener('click', () => { filter = 'todo'; render(); });
 $('#tab-all').addEventListener('click', () => { filter = 'all'; render(); });
+$('#tab-pdf').addEventListener('click', () => { filter = 'pdf'; render(); });
+$('#accept-all').addEventListener('click', async () => {
+  for (const i of items.filter((i) => i.status === 'review')) {
+    i.status = 'accepted';
+    await inPage(applyAltOnPage, [i.img.id, i.suggestion ?? '']);
+  }
+  render();
+});
 $('#export-csv').addEventListener('click', () => download(`altwise-${new URL(page.url).hostname}.csv`, csv(), 'text/csv'));
 $('#copy-all').addEventListener('click', async (e) => {
   const done = items.filter((i) => i.status === 'accepted');
@@ -450,14 +481,12 @@ $('#list').addEventListener('click', async (e) => {
   if (!btn) return;
   const item = items.find((i) => i.img.id === Number(btn.dataset.id));
   if (!item) return;
-  const run = (func: (...a: never[]) => void, args: unknown[]) =>
-    chrome.scripting.executeScript({ target: { tabId }, func: func as () => void, args: args as [] });
   switch (btn.dataset.act) {
-    case 'show': await run(highlightOnPage, [item.img.id]); break;
+    case 'show': await inPage(highlightOnPage, [item.img.id]); break;
     case 'copy': await navigator.clipboard.writeText(htmlFor(item)); flash(btn, 'Copied'); break;
     case 'accept':
       item.status = 'accepted';
-      await run(applyAltOnPage, [item.img.id, item.suggestion ?? '']);
+      await inPage(applyAltOnPage, [item.img.id, item.suggestion ?? '']);
       render();
       break;
     case 'retry':

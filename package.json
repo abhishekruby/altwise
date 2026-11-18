@@ -4,7 +4,8 @@
   "scripts": {
     "dev": "vite build --watch --mode development",
     "build": "tsc && vite build",
-    "test": "node --experimental-strip-types src/rules.test.ts"
+    "test": "node --experimental-strip-types src/rules.test.ts",
+    "release": "tsc && vite build --mode judges --outDir release/altwise && cd release && rm -f altwise-extension.zip && zip -qr altwise-extension.zip altwise"
   },
   "license": "Apache-2.0",
   "description": "Chrome extension that audits page images and writes alt text with Firebase AI Logic hybrid inference",

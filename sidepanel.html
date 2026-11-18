@@ -56,7 +56,8 @@
   .legend b { font-variant-numeric: tabular-nums; }
   .legend .r { color: var(--muted); } .legend .l { color: var(--device); } .legend .c { color: var(--cloud); }
   #privacy-line { font-size: 13px; margin-top: 8px; font-weight: 500; }
-  .tools { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+  .tools { display: flex; gap: 6px; margin-top: 12px; flex-wrap: wrap; }
+  .tools button { font-size: 13px; padding: 6px 10px; }
   .tabs { display: flex; gap: 4px; margin: 16px 0 8px; border-bottom: 1px solid var(--line); }
   .tabs button { border: 0; border-radius: 0; background: none; padding: 8px 10px; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; }
   .tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--ink); font-weight: 600; }
@@ -84,6 +85,13 @@
   .state.working::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--device); margin-right: 6px; animation: pulse 1s infinite; }
   @keyframes pulse { 50% { opacity: .25; } }
   .empty { color: var(--muted); text-align: center; padding: 24px 0; }
+  #empty { margin-top: 20px; }
+  .steps { list-style: none; padding: 0; margin: 8px 0 12px; }
+  .steps li { display: flex; gap: 10px; padding: 10px 0; border-top: 1px solid var(--line); font-size: 13px; color: var(--muted); }
+  .steps b { color: var(--ink); font-weight: 600; }
+  .dot { flex: none; width: 10px; height: 10px; border-radius: 50%; margin-top: 5px; }
+  .dot.r { background: var(--muted); } .dot.l { background: var(--device); } .dot.c { background: var(--cloud); }
+  button[disabled] { opacity: .5; cursor: default; }
   .section-h { font-size: 15px; margin: 20px 0 2px; }
   .section-h .count { color: var(--muted); font-weight: 400; }
   .hint { font-size: 12px; color: var(--muted); margin: 0 0 8px; }
@@ -116,27 +124,37 @@
   <section id="summary" class="box" hidden aria-label="Page summary">
     <div id="page-title"></div>
     <div class="scores">
-      <span class="score"><span id="score-before">0</span><small>/100 now</small></span>
+      <span class="score"><span id="score-before">0</span><small>/100 before</small></span>
       <span class="arrow">→</span>
       <span class="score"><span id="score-after">0</span><small>/100 after fixes</small></span>
     </div>
     <div class="meter" aria-hidden="true"><div id="meter-rules"></div><div id="meter-local"></div><div id="meter-cloud"></div></div>
     <div class="legend"><span class="r">Rules only <b id="count-rules">0</b></span><span class="l">Gemini Nano on device <b id="count-local">0</b></span><span class="c">Cloud <b id="count-cloud">0</b></span></div>
     <div id="privacy-line"></div>
-    <div class="tools"><button id="copy-all">Copy accepted HTML</button><button id="export-csv">Export CSV report</button></div>
+    <div class="tools"><button id="accept-all" class="primary" disabled>Accept all</button><button id="copy-all">Copy accepted HTML</button><button id="export-csv">Export CSV</button></div>
   </section>
 
+  <section id="empty" aria-label="How Altwise works">
+    <h2 class="section-h">How each image is handled</h2>
+    <ol class="steps">
+      <li><span class="dot r" aria-hidden="true"></span><div><b>Rules, no AI.</b> Spacers, tiny icons and hidden images are sorted out instantly. Existing alt text is graded.</div></li>
+      <li><span class="dot l" aria-hidden="true"></span><div><b>Gemini Nano on this device.</b> Every remaining image is classified and gets alt text that fits the page around it. Photos of people stop here.</div></li>
+      <li><span class="dot c" aria-hidden="true"></span><div><b>Gemini in the cloud.</b> Only charts, maps and images full of text, which need a bigger model to read. Linked PDFs too, since PDF input is cloud only.</div></li>
+    </ol>
+    <p class="hint">Nothing is changed on the real site. Accepting a suggestion previews it on this page and gives you HTML to paste into your CMS.</p>
+  </section>
+
+  <div class="tabs" role="tablist" id="tabs" hidden>
+    <button id="tab-todo" role="tab" aria-selected="true">To fix</button>
+    <button id="tab-all" role="tab" aria-selected="false">All</button>
+    <button id="tab-pdf" role="tab" aria-selected="false" hidden>PDFs</button>
+  </div>
+  <div id="list" aria-live="polite"></div>
   <section id="pdfs" hidden aria-labelledby="pdf-h">
     <h2 id="pdf-h" class="section-h">Linked PDFs <span class="count">(<span id="pdf-count">0</span>)</span></h2>
     <p class="hint">Structure is checked on this device. The content review runs in the cloud, because PDF input is cloud only.</p>
     <div id="pdf-list"></div>
   </section>
-
-  <div class="tabs" role="tablist">
-    <button id="tab-todo" role="tab" aria-selected="true">To fix</button>
-    <button id="tab-all" role="tab" aria-selected="false">All</button>
-  </div>
-  <div id="list" aria-live="polite"></div>
 </main>
 <script type="module" src="./src/main.ts"></script>
 </body>
