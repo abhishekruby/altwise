@@ -6,9 +6,9 @@ It uses Firebase AI Logic hybrid inference. Gemini Nano runs on your computer, l
 
 ## Why this exists
 
-A school newsletter page usually has a dozen images: the class photo, a chart of test scores, a map to the parking lot, a flyer someone photographed on their phone. Most of them have no alt text, or alt text like `IMG_2041.JPG`. A blind parent hears the file name and nothing else.
+A school newsletter page usually has a dozen images: the class photo, a chart of test scores, a map to the parking lot, a flyer someone photographed on their phone. Many of them have no alt text, or alt text like `IMG_2041.JPG`. A blind parent hears the file name and nothing else. This is the second most common accessibility failure on the web: the [WebAIM Million 2026](https://webaim.org/projects/million/) found missing alt text on 53.1% of the top million home pages, about 10.8 images per page.
 
-In the US, the Department of Justice's 2024 ADA Title II rule requires state and local government websites, public schools included, to meet WCAG 2.1 AA. In April 2026 the DOJ moved the first deadline back by a year, so governments serving 50,000 people or more now have until April 26, 2027. The standard did not change. The people responsible are usually a front-office secretary or a communications officer, not a developer. They need a tool that tells them what is wrong on the page in front of them and hands them the fix.
+In the US, the Department of Justice's 2024 ADA Title II rule requires state and local government websites, public schools included, to meet WCAG 2.1 AA. In April 2026 the DOJ moved the first deadline back by a year, so governments serving 50,000 people or more now have until April 26, 2027. The standard did not change. It covers more than 90,000 local governments, 12,546 of them independent school districts ([2022 Census of Governments](https://www.stlouisfed.org/publications/regional-economist/2024/march/local-governments-us-number-type)). The people responsible are usually a front-office secretary or a communications officer, not a developer. They need a tool that tells them what is wrong on the page in front of them and hands them the fix.
 
 Sending every image to a cloud API is the obvious build, and it is the wrong one here. Those pages are full of children's faces. Altwise keeps them on the device.
 

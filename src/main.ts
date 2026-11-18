@@ -3,7 +3,7 @@ import { classify, describe, deviceAvailability, hasPeopleOnDevice, initDevice, 
 import { applyAltOnPage, clearMarks, collectFromPage, highlightOnPage, markOnPage, type PdfLink } from './page.ts';
 import { pdfFacts, vagueLinkText, type PdfFacts } from './pdf.ts';
 import {
-  GRADE_LABEL, gradeAlt, needsAI, ruleDecorative, shouldEscalate, tidyAlt,
+  GRADE_LABEL, gradeAlt, needsAI, photoTiles, ruleDecorative, shouldEscalate, tidyAlt,
   type AltGrade, type Kind, type PageImage,
 } from './rules.ts';
 
@@ -99,20 +99,29 @@ async function mayUseCloud(): Promise<boolean> {
 
 // ---------- image loading ----------
 
-function toCanvas(el: HTMLImageElement, max: number): HTMLCanvasElement {
-  const scale = Math.min(1, max / Math.max(el.naturalWidth || 1, el.naturalHeight || 1));
+/**
+ * Draws the image scaled to fit `max`. With `square`, it is centred on a white square instead:
+ * Gemini Nano stretches every image to a square, which squashes logos, banners and wide charts.
+ */
+function toCanvas(el: HTMLImageElement, max: number, square = false): HTMLCanvasElement {
+  const w0 = el.naturalWidth || 300, h0 = el.naturalHeight || 150;
+  const scale = Math.min(1, max / Math.max(w0, h0));
+  const w = Math.max(1, Math.round(w0 * scale)), h = Math.max(1, Math.round(h0 * scale));
   const canvas = document.createElement('canvas');
-  canvas.width = Math.max(1, Math.round((el.naturalWidth || 300) * scale));
-  canvas.height = Math.max(1, Math.round((el.naturalHeight || 150) * scale));
+  canvas.width = square ? Math.max(w, h) : w;
+  canvas.height = square ? Math.max(w, h) : h;
   const ctx = canvas.getContext('2d')!;
   ctx.fillStyle = '#fff';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.drawImage(el, 0, 0, canvas.width, canvas.height);
+  ctx.drawImage(el, (canvas.width - w) / 2, (canvas.height - h) / 2, w, h);
   return canvas;
 }
 
-/** Fetches the image and re-encodes it as JPEG, max 768 px (what Gemini Nano sees anyway), plus a small thumbnail. */
-async function loadImage(src: string): Promise<{ part: Part; thumb: string }> {
+const jpeg = (c: HTMLCanvasElement): Part => ({ type: 'inlineData', inlineData: { mimeType: 'image/jpeg', data: c.toDataURL('image/jpeg', 0.85).split(',')[1] } });
+
+/** Fetches the image once: a padded square for Gemini Nano, the natural shape for the cloud, a thumbnail,
+ * and whether any part of it looks like a photograph (drawings cannot show a real person). */
+async function loadImage(src: string): Promise<{ part: Part; cloudPart: Part; thumb: string; hasPhoto: boolean }> {
   const res = await fetch(src);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const url = URL.createObjectURL(await res.blob());
@@ -120,8 +129,12 @@ async function loadImage(src: string): Promise<{ part: Part; thumb: string }> {
     const el = new Image();
     el.src = url;
     await el.decode();
-    const data = toCanvas(el, 768).toDataURL('image/jpeg', 0.85).split(',')[1];
-    return { part: { type: 'inlineData', inlineData: { mimeType: 'image/jpeg', data } }, thumb: toCanvas(el, 160).toDataURL('image/jpeg', 0.8) };
+    const square = toCanvas(el, 768, true);
+    const pixels = square.getContext('2d')!.getImageData(0, 0, square.width, square.height).data;
+    return {
+      part: jpeg(square), cloudPart: jpeg(toCanvas(el, 1536)), thumb: toCanvas(el, 160).toDataURL('image/jpeg', 0.8),
+      hasPhoto: photoTiles(pixels, square.width, square.height) > 0,
+    };
   } finally {
     URL.revokeObjectURL(url);
   }
@@ -227,6 +240,7 @@ async function scan() {
   } finally {
     busy = false;
     $('#scan').removeAttribute('disabled');
+    if (items.length) render(); // the timing line only shows once the scan is over
   }
 }
 
@@ -270,21 +284,22 @@ async function processItem(item: Item): Promise<{ cloud?: Promise<void> }> {
   render();
   await inPage(markOnPage, [item.img.id, 'Reading…', 'working', true]);
   try {
-    const { part, thumb } = await loadImage(item.img.src);
+    const { part, cloudPart, thumb, hasPhoto } = await loadImage(item.img.src);
     item.thumb = thumb;
     let t = performance.now();
     const c = await classify(item.img, part, page.title, strict);
     item.ms[c.source === 'on_device' ? 'device' : 'cloud'] = performance.now() - t;
     item.sources.push(c.source);
     item.kind = c.kind;
-    item.hasPeople = c.has_people;
+    item.hasPeople = c.has_people && hasPhoto;
     item.suggestion = c.kind === 'decorative' ? '' : tidyAlt(c.alt);
-    item.note = c.has_people
+    item.note = item.hasPeople
       ? (c.source === 'on_device' ? 'People in photo: kept on this device' : 'People in photo, read in the cloud because Gemini Nano is not ready')
       : '';
 
-    if (shouldEscalate(c, settings.escalate_text_images)) {
-      if (c.source === 'on_device') {
+    if (shouldEscalate(c, settings.escalate_text_images, hasPhoto)) {
+      // A drawing has no photo of anyone to protect. Anything photographic gets a second look first.
+      if (hasPhoto && c.source === 'on_device') {
         t = performance.now();
         // Fail closed: if the check itself breaks, treat the image as having people in it.
         const people = await hasPeopleOnDevice(part).catch(() => true);
@@ -296,14 +311,13 @@ async function processItem(item: Item): Promise<{ cloud?: Promise<void> }> {
           return {};
         }
       }
-      item.note = c.kind === 'complex'
-        ? 'Chart or diagram, no people: sent to the cloud for a full description'
-        : 'Text image, no people: sent to the cloud to read it';
+      const why = hasPhoto ? 'Gemini Nano checked twice: no people' : 'A drawing, no photo of anyone';
+      item.note = `${why}. Sent to the cloud ${c.kind === 'complex' ? 'for a full description' : 'to read the text'}.`;
       render();
       await inPage(markOnPage, [item.img.id, 'Sending to cloud…', 'working', false]);
       const cloud = cloudSlot(async () => {
         const t2 = performance.now();
-        const d = await describe(item.img, part, page.title);
+        const d = await describe(item.img, cloudPart, page.title);
         item.ms.cloud = (item.ms.cloud ?? 0) + performance.now() - t2;
         item.sources.push(d.source);
         item.suggestion = tidyAlt(d.alt);

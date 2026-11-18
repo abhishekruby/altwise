@@ -76,14 +76,46 @@ export interface Classification {
 }
 
 /**
- * Privacy rule: an image with people in it never goes to the cloud.
+ * Privacy rule: a photo of a person never goes to the cloud.
  * Charts, infographics and text-heavy images do, because the on-device model
  * sees them at 768x768 and cannot read small numbers reliably.
  * Logos and link images contain text too, but their alt names the destination, so they stay local.
+ * `hasPhoto` comes from photoTiles(): a drawing with no photographic pixels cannot show a real person,
+ * even if the model saw stick figures or icons of people in it.
  */
-export function shouldEscalate(c: Classification, escalateText = true): boolean {
-  if (c.has_people) return false;
+export function shouldEscalate(c: Classification, escalateText = true, hasPhoto = true): boolean {
+  if (c.has_people && hasPhoto) return false;
   return c.kind === 'complex' || (escalateText && c.has_text && c.kind === 'informative');
+}
+
+/**
+ * Counts 16 px tiles that look like part of a photograph. In drawn graphics (charts, maps, text,
+ * icons) most neighbouring pixels are identical, even around anti-aliased edges. In photos, sensor
+ * noise and texture make identical neighbours rare, in colour and in black and white alike.
+ * A tiny photo pasted into a flyer still produces a few such tiles.
+ * ponytail: a heuristic. JPEG-compressed charts and gradients can count as photo-like; that only
+ * costs one extra on-device check, never a privacy leak.
+ */
+export function photoTiles(rgba: Uint8ClampedArray, width: number, height: number, tile = 16): number {
+  let photo = 0;
+  for (let ty = 0; ty + tile <= height; ty += tile) {
+    for (let tx = 0; tx + tile <= width; tx += tile) {
+      let same = 0, pairs = 0;
+      const levels = new Set<number>();
+      for (let y = ty; y < ty + tile; y++) {
+        for (let x = tx; x < tx + tile; x++) {
+          const i = (y * width + x) * 4;
+          levels.add(((rgba[i] * 3 + rgba[i + 1] * 6 + rgba[i + 2]) / 10) | 0);
+          if (x + 1 < tx + tile) {
+            pairs++;
+            if (Math.abs(rgba[i] - rgba[i + 4]) + Math.abs(rgba[i + 1] - rgba[i + 5]) + Math.abs(rgba[i + 2] - rgba[i + 6]) <= 3) same++;
+          }
+        }
+      }
+      if (same / pairs < 0.35 && levels.size >= 32) photo++;
+    }
+  }
+  return photo;
 }
 
 /** Cleans model alt text: trims, drops "Image of", caps length at a word boundary. */
