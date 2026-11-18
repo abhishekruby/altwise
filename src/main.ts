@@ -116,7 +116,7 @@ async function scan() {
     // ?target=<url part> lets the panel run in a normal tab for testing.
     const target = new URLSearchParams(location.search).get('target');
     const [tab] = target
-      ? (await chrome.tabs.query({})).filter((t) => t.url?.includes(target))
+      ? (await chrome.tabs.query({})).filter((t) => t.url?.includes(target) && !t.url.startsWith(location.origin))
       : await chrome.tabs.query({ active: true, currentWindow: true });
     if (!tab?.id || !/^https?:|^file:/.test(tab.url ?? '')) throw new Error('Open a web page first, then scan.');
     tabId = tab.id;
