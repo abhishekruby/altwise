@@ -339,7 +339,9 @@ async function processItem(item: Item): Promise<{ cloud?: Promise<void> }> {
   render();
   await inPage(markOnPage, [item.img.id, 'Reading…', 'working', true]);
   try {
-    const { part, natural, thumb, regions } = await loadImage(item.img.src);
+    const { part, natural, thumb, regions } = await loadImage(item.img.src).catch(() => {
+      throw new Error('Could not load this image');
+    });
     const hasPhoto = regions.length > 0;
     item.thumb = thumb;
     item.cloudView = undefined;
@@ -436,8 +438,8 @@ async function processPdf(p: PdfItem) {
 function errorText(e: unknown): string {
   const m = e instanceof Error ? e.message : String(e);
   if (/ONLY_ON_DEVICE|LanguageModel API not available|on-device model is not available/i.test(m)) return 'Not checked: strict privacy is on and Gemini Nano is not ready';
-  if (/HTTP|Failed to fetch|decode/i.test(m)) return 'Could not load this image';
-  return m.slice(0, 140);
+  if (/\b(429|500|502|503|504)\b|overloaded|unavailable|RESOURCE_EXHAUSTED|Failed to fetch|network/i.test(m)) return 'The cloud model was busy. Try again in a minute.';
+  return m.replace(/^\[?FirebaseError[^\]]*\]?:?\s*/i, '').slice(0, 140);
 }
 
 function setProgress(text: string, fraction: number) {

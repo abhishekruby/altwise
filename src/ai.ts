@@ -164,10 +164,23 @@ function withTimeout<T>(p: Promise<T>): Promise<T> {
   ]);
 }
 
-/** Runs a prompt and parses its JSON. Small models sometimes return broken JSON, so try once more. */
+// Busy or rate-limited cloud, or a dropped connection: worth one more try after a short wait.
+const transient = (e: unknown) => /\b(429|500|502|503|504)\b|overloaded|unavailable|RESOURCE_EXHAUSTED|Failed to fetch|network/i.test(String(e));
+
+/**
+ * Runs a prompt and parses its JSON. Small models sometimes return broken JSON, and the cloud is
+ * sometimes briefly busy, so each gets one more try. A timeout is not retried.
+ */
 async function askJson<T>(model: GenerativeModel, request: (string | Part)[]): Promise<{ data: T; source: Source }> {
   for (let attempt = 0; ; attempt++) {
-    const result = await withTimeout(model.generateContent(request));
+    let result;
+    try {
+      result = await withTimeout(model.generateContent(request));
+    } catch (e) {
+      if (attempt > 0 || !transient(e)) throw e;
+      await new Promise((r) => setTimeout(r, 2500));
+      continue;
+    }
     try {
       return { data: JSON.parse(result.response.text()) as T, source: (result.response.inferenceSource ?? 'in_cloud') as Source };
     } catch {
