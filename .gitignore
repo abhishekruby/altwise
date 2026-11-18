@@ -9,3 +9,5 @@ dist/
 !.env.example
 PLAN.md
 release/
+web-dist/
+.firebase/

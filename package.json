@@ -3,7 +3,10 @@
   "version": "1.0.0",
   "scripts": {
     "dev": "vite build --watch --mode development",
+    "web": "vite --mode web",
     "build": "tsc && vite build",
+    "build:web": "tsc && vite build --mode web && cp -r demo web-dist/ && node dev/check-no-token.mjs web-dist",
+    "deploy:web": "npm run build:web && firebase deploy --only hosting --project $(grep VITE_FIREBASE_PROJECT_ID .env.local | cut -d= -f2)",
     "test": "node --experimental-strip-types src/rules.test.ts",
     "release": "tsc && vite build --mode judges --outDir release/altwise && cd release && rm -f altwise-extension.zip && zip -qr altwise-extension.zip altwise"
   },

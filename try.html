@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Try Altwise</title>
+<meta name="description" content="Altwise finds images with missing or weak alt text and writes better text, with Gemini Nano on your computer and Gemini in the cloud only for what is safe to send.">
+<link rel="icon" href="demo/img/logo.svg">
+<style>
+  :root {
+    --bg: #f7f6f2; --panel: #ffffff; --ink: #1c1f23; --muted: #5d6470; --line: #e3e1da; --device: #0d7a5f; --focus: #e8590c;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #15171a; --panel: #1e2125; --ink: #eceae4; --muted: #a2a8b2; --line: #30343a; --device: #4fd1a5; color-scheme: dark; }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; display: flex; flex-direction: column; }
+  :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+  header { display: flex; align-items: center; gap: 16px 24px; flex-wrap: wrap; padding: 12px 16px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  h1 { font-size: 18px; margin: 0; white-space: nowrap; }
+  h1 span { color: var(--device); }
+  .intro { margin: 0; color: var(--muted); flex: 1 1 360px; }
+  .pages { display: flex; gap: 4px; }
+  .pages button { font: inherit; border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+  .pages button[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+  header a { color: var(--ink); font-weight: 600; white-space: nowrap; }
+  main { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) 420px; min-height: 0; }
+  iframe { border: 0; width: 100%; height: 100%; display: block; }
+  #panel { border-left: 1px solid var(--line); }
+  footer { padding: 8px 16px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--line); background: var(--panel); }
+  footer a { color: inherit; }
+  @media (max-width: 900px) {
+    html, body { height: auto; }
+    main { display: block; }
+    #page { height: 70vh; }
+    #panel { height: 100vh; border-left: 0; border-top: 1px solid var(--line); }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Alt<span>wise</span></h1>
+  <p class="intro">Left: a made-up school page with accessibility mistakes on purpose. Right: the real Altwise panel, the same code as the Chrome extension. Click <b>Scan this page</b>.</p>
+  <div class="pages" role="group" aria-label="Demo page">
+    <button data-src="demo/" aria-pressed="true">Newsletter</button>
+    <button data-src="demo/flyers.html" aria-pressed="false">Flyers (privacy test)</button>
+  </div>
+  <a href="https://github.com/abhishekruby/altwise">Code and extension</a>
+</header>
+<main>
+  <iframe id="page" title="Demo school page" src="demo/"></iframe>
+  <iframe id="panel" title="Altwise panel" src="sidepanel.html"></iframe>
+</main>
+<footer>
+  Works best in desktop Chrome. Gemini Nano runs on your computer where Chrome supports it. Without it, Altwise asks before anything goes to the cloud.
+  This site is protected by reCAPTCHA and the Google <a href="https://policies.google.com/privacy">Privacy Policy</a> and <a href="https://policies.google.com/terms">Terms of Service</a> apply.
+</footer>
+<script>
+  for (const b of document.querySelectorAll('.pages button')) {
+    b.addEventListener('click', () => {
+      document.getElementById('page').src = b.dataset.src;
+      for (const o of document.querySelectorAll('.pages button')) o.setAttribute('aria-pressed', String(o === b));
+    });
+  }
+</script>
+</body>
+</html>

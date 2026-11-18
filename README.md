@@ -47,6 +47,8 @@ The counter at the top shows how many images were handled by rules, by Gemini Na
 
 ## Try it
 
+**In your browser, nothing to install: https://altwise.web.app** shows the demo school page beside the real Altwise panel. It is the same panel code as the extension, built as a normal web page (Firebase Hosting, App Check with reCAPTCHA). Gemini Nano runs on device wherever Chrome supports the Prompt API on the web; otherwise Altwise asks before using the cloud.
+
 ### Load the extension
 
 You need Chrome 139 or later on desktop.
@@ -71,7 +73,7 @@ Without this, Altwise uses the cloud for everything and says so. To run on devic
 
 **Privacy test page: https://abhishekruby.github.io/altwise/demo/flyers.html.** Three school flyers hide a small photo of children. Altwise keeps those photos on the device and sends the cloud a copy with the photo painted grey, so the event details still get read. A bus timetable, a chart and a cartoon poster go to the cloud as they are.
 
-[demo/](demo/) is a fictional school newsletter with the usual mistakes on purpose: a file name as alt text, a chart with alt="chart", a map and a pie chart with no alt, a librarian photo marked decorative, a scanned PDF behind a "click here" link. Serve the repo with `npx vite` and open `http://localhost:5173/demo/`.
+[demo/](demo/) is a fictional school newsletter with the usual mistakes on purpose: a file name as alt text, a chart with alt="chart", a map and a pie chart with no alt, a librarian photo marked decorative, a scanned PDF behind a "click here" link. Run `npm run web` to serve it locally.
 
 ## Known limits
 
@@ -82,7 +84,7 @@ Without this, Altwise uses the cloud for everything and says so. To run on devic
 ## Development
 
 - `npm test` runs the rule and PDF checks in Node.
-- `npx vite` then `http://localhost:5173/dev/` shows the demo page and the real panel side by side. Chrome extension APIs are stubbed, so you can work on the panel without reloading the extension.
+- `npm run web` then `http://localhost:5173/try.html` shows the demo page and the real panel side by side, with live reload. [src/web.ts](src/web.ts) stands in for the few `chrome.*` APIs the panel uses. `npm run build:web` builds the public version and fails if the App Check debug token ends up in it.
 - `python3 dev/make_assets.py` regenerates the demo PDFs and the icons.
 
 ```
@@ -90,7 +92,8 @@ src/ai.ts       Firebase init, App Check, Remote Config, the three models and th
 src/rules.ts    alt text grading, decorative detection, routing rule
 src/pdf.ts      PDF structure checks from raw bytes and Flate streams
 src/page.ts     functions injected into the audited tab
-src/main.ts     side panel: scan loop, cards, export
+src/main.ts     side panel: scan loop, routing, redaction, cards, export
+src/web.ts      the same panel as a web page (try.html)
 ```
 
 ## Built during the hackathon

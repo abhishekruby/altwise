@@ -2,7 +2,7 @@
 // Remote Config can change the cloud model and routing without shipping a new extension.
 
 import { initializeApp } from 'firebase/app';
-import { CustomProvider, initializeAppCheck } from 'firebase/app-check';
+import { CustomProvider, initializeAppCheck, ReCaptchaV3Provider } from 'firebase/app-check';
 import { getAI, getGenerativeModel, GoogleAIBackend, InferenceMode, type GenerativeModel, type Part } from 'firebase/ai';
 import { fetchAndActivate, getRemoteConfig, getValue } from 'firebase/remote-config';
 import type { Classification, PageImage } from './rules.ts';
@@ -15,11 +15,17 @@ const app = initializeApp({
   appId: env.VITE_FIREBASE_APP_ID,
 });
 
-// Extensions cannot load reCAPTCHA (remote code is blocked in MV3), so App Check runs
-// in debug mode. With a debug token set, the SDK never calls the provider below.
-(self as unknown as { FIREBASE_APPCHECK_DEBUG_TOKEN: string }).FIREBASE_APPCHECK_DEBUG_TOKEN = env.VITE_APPCHECK_DEBUG_TOKEN;
+// The public web version (try.html) uses reCAPTCHA v3 like any website and ships no debug token.
+// Extensions cannot load reCAPTCHA (remote code is blocked in MV3), so the extension, and local
+// development, run App Check in debug mode. With a debug token set, the SDK never calls the provider.
+const recaptchaKey = env.MODE === 'web' && !env.DEV ? env.VITE_RECAPTCHA_SITE_KEY : '';
+if (!recaptchaKey) {
+  (self as unknown as { FIREBASE_APPCHECK_DEBUG_TOKEN: string }).FIREBASE_APPCHECK_DEBUG_TOKEN = env.VITE_APPCHECK_DEBUG_TOKEN;
+}
 initializeAppCheck(app, {
-  provider: new CustomProvider({ getToken: () => Promise.reject(new Error('Debug provider only')) }),
+  provider: recaptchaKey
+    ? new ReCaptchaV3Provider(recaptchaKey)
+    : new CustomProvider({ getToken: () => Promise.reject(new Error('Debug provider only')) }),
   isTokenAutoRefreshEnabled: true,
 });
 

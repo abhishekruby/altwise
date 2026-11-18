@@ -1,0 +1,7 @@
+{
+  "hosting": {
+    "public": "web-dist",
+    "cleanUrls": true,
+    "redirects": [{ "source": "/", "destination": "/try", "type": 302 }]
+  }
+}
