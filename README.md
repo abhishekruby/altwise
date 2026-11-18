@@ -2,7 +2,7 @@
 
 Altwise is a Chrome extension for the people who keep school and town websites running. Open it on any page and it finds every image with missing or weak alt text, writes a better version, and checks the PDFs the page links to. You review each suggestion, accept it, and copy the fixed HTML into your CMS.
 
-It uses Firebase AI Logic hybrid inference. Gemini Nano runs on your computer and handles most images. Photos of people are never sent anywhere. Only charts, maps, posters full of text and PDFs go to Gemini in the cloud, because those need a bigger model to read small numbers and long documents.
+It uses Firebase AI Logic hybrid inference. Gemini Nano runs on your computer, looks at every image first and decides what the cloud is allowed to see. Photos of people stay on the computer. Charts, maps and posters full of text go to Gemini in the cloud, because reading small numbers needs a bigger model, but only after Nano has checked a second time that nobody is in them. Linked PDFs go to the cloud too, since PDF input is cloud only.
 
 ## Why this exists
 
@@ -20,13 +20,22 @@ Every image goes through three steps, and the side panel shows which one handled
 |---|---|---|
 | Rules | Your browser, no AI | Skips hidden, tiny and spacer images. Grades existing alt text: missing, file name, generic ("chart", "logo"), too long, starts with "image of". |
 | Gemini Nano | On device | Classifies the image as decorative, informative, functional (a link) or complex, notes whether people or text are visible, and writes alt text using the page heading, caption, link target and nearby paragraph. |
-| Gemini (cloud) | Firebase AI Logic | Only for complex images and informative images with text, and only if no people are visible. Writes a short alt and a full long description with every value it can read. |
+| Gemini Nano, second look | On device | Runs only when an image is about to go to the cloud. One narrow question: is any person visible anywhere, including small faces inside a poster? Unsure counts as yes. If the check fails, the image stays local. |
+| Gemini (cloud) | Firebase AI Logic | Only for complex images and informative images with text that passed the second look. Writes a short alt and a full long description with every value it can read. Runs alongside Nano, so Nano keeps reading the next image meanwhile. |
 
 PDFs get structure checks on the device (tagged, descriptive title, language, real text or a scan, vague link text like "click here"). The content review goes to the cloud, because PDF input is cloud only.
 
-If Gemini Nano is not available yet (it downloads in the background, and some computers cannot run it), `PREFER_ON_DEVICE` falls back to the cloud so the tool still works. The panel says so on every card. Turn on **Strict privacy** to switch to `ONLY_ON_DEVICE`, where nothing is classified in the cloud at all.
+If Gemini Nano is not available yet (it downloads in the background, and some computers cannot run it), `PREFER_ON_DEVICE` would send every image to the cloud, photos of people included. Altwise asks first. Say yes and the scan runs in the cloud, with every card marked that way. Say no and nothing leaves the computer. **Strict privacy** switches the classifier to `ONLY_ON_DEVICE`, so it never falls back and never asks.
 
-The counter at the top shows how many images were handled by rules, by Gemini Nano and by the cloud, and how many never left the computer. The badge on each result comes from the SDK's `inferenceSource`, not from a guess.
+The counter at the top shows how many images were handled by rules, by Gemini Nano and by the cloud, and how many never left the computer. The badge on each result comes from the SDK's `inferenceSource`, not from a guess, and shows how long that step took.
+
+## What you can do with the results
+
+- Edit any suggestion, then **Accept** it or **Accept all**. The fix is previewed on the live page and nothing on the real site changes.
+- **Listen** reads the image the way a screen reader does today ("IMG_2041.JPG, image") and then with the suggested text. It is the quickest way to show a colleague why this matters.
+- **Copy HTML** gives markup to paste into the CMS. Charts come as a `<figure>` with the long description in a `<details>` block linked by `aria-describedby`.
+- **Export CSV** lists every image and PDF with its issue, suggestion and where it was processed, for a report to whoever signs off on compliance.
+- Results stay when you close the panel, and the panel tells you when you have moved to a different page.
 
 ## Firebase products used
 
@@ -59,6 +68,12 @@ Without this, Altwise uses the cloud for everything and says so. To run on devic
 **Live demo page: https://abhishekruby.github.io/altwise/demo/** (open it, then click the Altwise icon and scan).
 
 [demo/](demo/) is a fictional school newsletter with the usual mistakes on purpose: a file name as alt text, a chart with alt="chart", a map and a pie chart with no alt, a librarian photo marked decorative, a scanned PDF behind a "click here" link. Serve the repo with `npx vite` and open `http://localhost:5173/demo/`.
+
+## Known limits
+
+- Only `<img>` elements are checked. CSS background images, inline `<svg>` and images inside iframes are not.
+- One page at a time. There is no site crawl.
+- Gemini Nano needs a capable computer (see above). On other computers Altwise still works, using the cloud after you agree to it.
 
 ## Development
 

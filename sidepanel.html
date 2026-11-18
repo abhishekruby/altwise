@@ -23,7 +23,7 @@
   body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
   :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
   header { padding: 16px 16px 12px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-  .brand { font-weight: 700; font-size: 18px; letter-spacing: -0.01em; }
+  .brand { font-weight: 700; font-size: 18px; letter-spacing: -0.01em; margin: 0; }
   .brand span { color: var(--device); }
   #device { font-size: 12px; padding: 3px 9px; border-radius: 99px; background: var(--line); color: var(--muted); white-space: nowrap; }
   #device[data-state="ok"] { background: var(--device-bg); color: var(--device); }
@@ -60,11 +60,11 @@
   .tools button { font-size: 13px; padding: 6px 10px; }
   .tabs { display: flex; gap: 4px; margin: 16px 0 8px; border-bottom: 1px solid var(--line); }
   .tabs button { border: 0; border-radius: 0; background: none; padding: 8px 10px; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; }
-  .tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--ink); font-weight: 600; }
+  .tabs button[aria-pressed="true"] { color: var(--ink); border-bottom-color: var(--ink); font-weight: 600; }
   .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin-bottom: 10px; }
   .card.status-accepted { border-color: var(--device); }
   .card-head { display: flex; gap: 12px; }
-  .thumb { width: 76px; height: 76px; object-fit: cover; border-radius: 8px; background: var(--line); flex: none; }
+  .thumb { width: 76px; height: 76px; object-fit: contain; border-radius: 8px; background: #fff; border: 1px solid var(--line); flex: none; }
   .meta { min-width: 0; flex: 1; }
   .chips { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
   .chip, .badge { font-size: 11px; padding: 2px 7px; border-radius: 99px; background: var(--line); color: var(--muted); font-weight: 500; }
@@ -80,6 +80,7 @@
   details summary { cursor: pointer; color: var(--cloud); }
   details p { white-space: pre-wrap; margin: 6px 0 0; }
   .actions { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; align-items: center; }
+  .actions button { font-size: 13px; padding: 5px 9px; }
   .done { color: var(--device); font-weight: 600; font-size: 13px; margin-right: 4px; }
   .state { margin-top: 10px; font-size: 13px; color: var(--muted); }
   .state.working::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--device); margin-right: 6px; animation: pulse 1s infinite; }
@@ -104,23 +105,30 @@
   .checks .fail span[aria-hidden] { color: var(--bad); font-weight: 700; }
   .summary { font-size: 13px; margin: 10px 0 0; }
   details ul { margin: 6px 0 0; padding-left: 18px; }
+  .stale { background: var(--warn-bg); color: var(--warn); border-radius: 8px; padding: 8px 12px; font-size: 13px; margin: 12px 0 0; }
+  #timing { margin: 4px 0 0; }
+  dialog { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); color: var(--ink); padding: 16px; max-width: 340px; }
+  dialog::backdrop { background: rgb(0 0 0 / .45); }
+  dialog h2 { font-size: 16px; margin: 0 0 8px; }
+  dialog p { font-size: 13px; color: var(--muted); margin: 0 0 8px; }
   .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 </style>
 </head>
 <body>
 <header>
-  <div class="brand">Alt<span>wise</span></div>
+  <h1 class="brand">Alt<span>wise</span></h1>
   <div id="device" role="status">Checking model…</div>
 </header>
 <main>
-  <p class="intro">Finds images with missing or weak alt text and writes better text. Photos of people are read on this device.</p>
+  <p class="intro">Finds images with missing or weak alt text and writes better text. With Gemini Nano on this computer, photos of people are never sent anywhere.</p>
   <button id="scan">Scan this page</button>
-  <label class="toggle"><input type="checkbox" id="strict"> <span>Strict privacy: classify every image on this device only, no cloud fallback</span></label>
+  <label class="toggle"><input type="checkbox" id="strict"> <span>Strict privacy: never fall back to the cloud. An image only leaves this computer after Gemini Nano has checked twice that no one is in it.</span></label>
   <div class="progress" aria-hidden="true"><div id="progress-bar"></div></div>
   <div id="progress-text" role="status" aria-live="polite"></div>
   <div id="error" role="alert"></div>
 
+  <p id="stale" class="stale" role="status" hidden>These results are for another page. Click Scan to check the page you're on now.</p>
   <section id="summary" class="box" hidden aria-label="Page summary">
     <div id="page-title"></div>
     <div class="scores">
@@ -131,6 +139,7 @@
     <div class="meter" aria-hidden="true"><div id="meter-rules"></div><div id="meter-local"></div><div id="meter-cloud"></div></div>
     <div class="legend"><span class="r">Rules only <b id="count-rules">0</b></span><span class="l">Gemini Nano on device <b id="count-local">0</b></span><span class="c">Cloud <b id="count-cloud">0</b></span></div>
     <div id="privacy-line"></div>
+    <div id="timing" class="hint"></div>
     <div class="tools"><button id="accept-all" class="primary" disabled>Accept all</button><button id="copy-all">Copy accepted HTML</button><button id="export-csv">Export CSV</button></div>
   </section>
 
@@ -144,18 +153,28 @@
     <p class="hint">Nothing is changed on the real site. Accepting a suggestion previews it on this page and gives you HTML to paste into your CMS.</p>
   </section>
 
-  <div class="tabs" role="tablist" id="tabs" hidden>
-    <button id="tab-todo" role="tab" aria-selected="true">To fix</button>
-    <button id="tab-all" role="tab" aria-selected="false">All</button>
-    <button id="tab-pdf" role="tab" aria-selected="false" hidden>PDFs</button>
+  <div class="tabs" role="group" aria-label="Show" id="tabs" hidden>
+    <button id="tab-todo" aria-pressed="true">To fix</button>
+    <button id="tab-all" aria-pressed="false">All</button>
+    <button id="tab-pdf" aria-pressed="false" hidden>PDFs</button>
   </div>
-  <div id="list" aria-live="polite"></div>
+  <h2 class="sr">Images on this page</h2>
+  <div id="list"></div>
   <section id="pdfs" hidden aria-labelledby="pdf-h">
     <h2 id="pdf-h" class="section-h">Linked PDFs <span class="count">(<span id="pdf-count">0</span>)</span></h2>
     <p class="hint">Structure is checked on this device. The content review runs in the cloud, because PDF input is cloud only.</p>
     <div id="pdf-list"></div>
   </section>
 </main>
+<dialog id="cloud-ask" aria-labelledby="cloud-ask-h" aria-describedby="cloud-ask-why cloud-ask-what">
+  <h2 id="cloud-ask-h">Gemini Nano isn't ready on this computer</h2>
+  <p id="cloud-ask-why"></p>
+  <p id="cloud-ask-what">Without it, every image on this page, photos of people included, would be read by Gemini in the cloud.</p>
+  <form method="dialog" class="actions">
+    <button value="cloud" class="primary">Use the cloud</button>
+    <button value="cancel" autofocus>Not now</button>
+  </form>
+</dialog>
 <script type="module" src="./src/main.ts"></script>
 </body>
 </html>

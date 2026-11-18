@@ -33,24 +33,41 @@ export function collectFromPage(): { images: PageImage[]; pdfs: PdfLink[]; title
     return '';
   };
 
+  // Lazy-loading scripts keep the real file in data-src and put a placeholder in src.
+  const realSrc = (img: HTMLImageElement): string => {
+    const lazy = img.dataset.src || img.dataset.lazySrc || img.dataset.original
+      || (img.dataset.srcset || img.dataset.lazySrcset || '').trim().split(/\s+/)[0];
+    const current = img.currentSrc || img.src;
+    const placeholder = !current || current.startsWith('data:') || (img.complete && img.naturalWidth > 0 && img.naturalWidth <= 2);
+    if (lazy && placeholder) {
+      try { return new URL(lazy, document.baseURI).href; } catch { /* keep current */ }
+    }
+    return current;
+  };
+
   const images: PageImage[] = [];
   document.querySelectorAll('img').forEach((img, id) => {
     img.dataset.altwiseId = String(id);
     const r = img.getBoundingClientRect();
     const style = getComputedStyle(img);
     const link = img.closest('a');
+    const src = realSrc(img);
+    const swapped = src !== (img.currentSrc || img.src);
     images.push({
       id,
-      src: img.currentSrc || img.src,
+      src,
       alt: img.getAttribute('alt'),
       width: Math.round(r.width),
       height: Math.round(r.height),
-      naturalWidth: img.naturalWidth,
-      naturalHeight: img.naturalHeight,
-      hidden: style.display === 'none' || style.visibility === 'hidden' || (r.width === 0 && r.height === 0),
+      // A placeholder's size says nothing about the real image, and 0 means "not loaded yet".
+      naturalWidth: swapped ? 0 : img.naturalWidth,
+      naturalHeight: swapped ? 0 : img.naturalHeight,
+      // A lazy image that has not loaded yet can measure 0x0 without being hidden.
+      hidden: style.display === 'none' || style.visibility === 'hidden' || (img.complete && !swapped && r.width === 0 && r.height === 0),
       role: img.getAttribute('role'),
       ariaHidden: img.closest('[aria-hidden="true"]') !== null,
       linkHref: link?.href ?? null,
+      linkHome: !!link && link.origin === location.origin && (link.pathname === '/' || link.pathname === location.pathname),
       linkText: clip(link?.textContent, 120),
       caption: clip(img.closest('figure')?.querySelector('figcaption')?.textContent, 200),
       heading: headingFor(img),

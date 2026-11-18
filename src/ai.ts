@@ -89,10 +89,25 @@ function cloudOnly(cloudModel: string, schema: Record<string, unknown>): Generat
   return getGenerativeModel(ai, { mode: InferenceMode.ONLY_IN_CLOUD, inCloudParams: { model: cloudModel, generationConfig: json(schema) } });
 }
 
+// The privacy gate: a second, narrow question that only Gemini Nano may answer.
+const peopleSchema = {
+  type: 'object',
+  properties: { people: { type: 'boolean' } },
+  required: ['people'],
+  additionalProperties: false,
+};
+
 function build(m: string) {
   return {
     normal: classifier(m, false),
     strict: classifier(m, true),
+    gate: getGenerativeModel(ai, {
+      mode: InferenceMode.ONLY_ON_DEVICE,
+      onDeviceParams: {
+        createOptions: { expectedInputs: [{ type: 'text', languages: ['en'] }, { type: 'image' }], expectedOutputs: [{ type: 'text', languages: ['en'] }] },
+        promptOptions: { responseConstraint: peopleSchema },
+      },
+    }),
     describer: cloudOnly(m, {
       type: 'object',
       properties: { alt: { type: 'string' }, long_description: { type: 'string' } },
@@ -130,11 +145,24 @@ export async function deviceAvailability(): Promise<string> {
 
 // ---------- prompts ----------
 
+/** Runs a prompt and parses its JSON. Small models sometimes return broken JSON, so try once more. */
+async function askJson<T>(model: GenerativeModel, request: (string | Part)[]): Promise<{ data: T; source: Source }> {
+  for (let attempt = 0; ; attempt++) {
+    const result = await model.generateContent(request);
+    try {
+      return { data: JSON.parse(result.response.text()) as T, source: (result.response.inferenceSource ?? 'in_cloud') as Source };
+    } catch {
+      if (attempt > 0) throw new Error('The model returned unreadable output');
+    }
+  }
+}
+
 function context(img: PageImage, pageTitle: string): string {
   const lines = [`Page title: ${pageTitle}`];
   if (img.heading) lines.push(`Section heading: ${img.heading}`);
   if (img.caption) lines.push(`Caption: ${img.caption}`);
-  if (img.linkHref) lines.push(`The image is a link to: ${img.linkHref}${img.linkText ? ` (link text: "${img.linkText}")` : ''}`);
+  if (img.linkHome) lines.push(`The image is a link to this site's home page${img.linkText ? ` (link text: "${img.linkText}")` : ''}`);
+  else if (img.linkHref) lines.push(`The image is a link to: ${img.linkHref}${img.linkText ? ` (link text: "${img.linkText}")` : ''}`);
   if (img.nearbyText) lines.push(`Text near the image: ${img.nearbyText}`);
   return lines.join('\n');
 }
@@ -146,14 +174,25 @@ ${context(img, pageTitle)}
 Classify the image:
 - decorative: adds nothing a reader would miss (borders, dividers, background textures, stock mood images that repeat nearby text)
 - informative: a photo or illustration that carries meaning
-- functional: the image is a link or button; the alt text must say where it goes or what it does
+- functional: the image is a link or button; the alt text must say where it goes or what it does. A logo that links to the home page gets the name written in the logo followed by "home", for example "Riverside Library home".
 - complex: a chart, graph, map, diagram, infographic or table that needs a long description
 Set has_people to true if any person or face is visible. Set has_text to true if the image contains words or numbers a reader needs.
 Write alt text for a screen reader user: specific, under 125 characters, no "image of". Use the page context. For decorative images the alt is "".`;
   const m = models();
-  const result = await (strictPrivacy ? m.strict : m.normal).generateContent([prompt, part]);
-  const parsed = JSON.parse(result.response.text()) as Classification;
-  return { ...parsed, source: (result.response.inferenceSource ?? 'in_cloud') as Source };
+  const { data, source } = await askJson<Classification>(strictPrivacy ? m.strict : m.normal, [prompt, part]);
+  return { ...data, source };
+}
+
+/**
+ * Asked on device right before an image would go to the cloud. The first pass may miss a small face
+ * in a poster or a crowd in the corner of a map, and a miss would send that photo to the cloud.
+ */
+export async function hasPeopleOnDevice(part: Part): Promise<boolean> {
+  const prompt = `Look at the whole image carefully, including small areas, corners and photos placed inside posters or collages.
+Is any real person, face, body or part of a person visible in a photograph? Drawings, icons and cartoons do not count.
+Answer people: true or false. If you are unsure, answer true.`;
+  const { data } = await askJson<{ people: boolean }>(models().gate, [prompt, part]);
+  return data.people;
 }
 
 export async function describe(img: PageImage, part: Part, pageTitle: string) {
@@ -163,8 +202,8 @@ ${context(img, pageTitle)}
 Write for a blind reader using a screen reader.
 alt: one sentence under 125 characters with the main takeaway, not a list of colors.
 long_description: plain-language description of everything the image shows. For charts give the title, axes and every value you can read. For infographics and screenshots give all the text in reading order. Do not guess values you cannot read; say they are unreadable.`;
-  const result = await models().describer.generateContent([prompt, part]);
-  return { ...(JSON.parse(result.response.text()) as { alt: string; long_description: string }), source: 'in_cloud' as Source };
+  const { data, source } = await askJson<{ alt: string; long_description: string }>(models().describer, [prompt, part]);
+  return { ...data, source };
 }
 
 export interface PdfReview { title: string; summary: string; scanned: boolean; issues: string[]; link_text: string }
@@ -178,6 +217,5 @@ scanned: true if the pages look like scanned images rather than real text.
 issues: up to 5 specific accessibility problems you can see, such as text that is only an image, form fields with no labels, tables without headers, meaning shown only by color, low contrast, images that need descriptions. Empty if none.
 link_text: better link text for the page, naming the document and ending with "(PDF)".`;
   const part: Part = { type: 'inlineData', inlineData: { mimeType: 'application/pdf', data: base64 } };
-  const result = await models().pdf.generateContent([prompt, part]);
-  return JSON.parse(result.response.text()) as PdfReview;
+  return (await askJson<PdfReview>(models().pdf, [prompt, part])).data;
 }

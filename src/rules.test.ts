@@ -17,13 +17,14 @@ assert.equal(gradeAlt('Students planting trees in the school garden'), 'ok');
 
 const base: PageImage = {
   id: 0, src: '', alt: null, width: 400, height: 300, naturalWidth: 800, naturalHeight: 600,
-  hidden: false, role: null, ariaHidden: false, linkHref: null, linkText: '', caption: '', heading: '', nearbyText: '',
+  hidden: false, role: null, ariaHidden: false, linkHref: null, linkHome: false, linkText: '', caption: '', heading: '', nearbyText: '',
 };
 assert.equal(ruleDecorative(base), null);
 assert.equal(ruleDecorative({ ...base, naturalWidth: 1, naturalHeight: 1 }), 'Spacer pixel');
 assert.equal(ruleDecorative({ ...base, naturalWidth: 0, naturalHeight: 0 }), null); // broken, not a spacer
 assert.equal(ruleDecorative({ ...base, width: 16, height: 16 }), 'Smaller than 24 px');
 assert.equal(ruleDecorative({ ...base, role: 'presentation' }), 'role="presentation"');
+assert.equal(ruleDecorative({ ...base, width: 0, height: 0, naturalWidth: 0, naturalHeight: 0 }), null); // lazy, not loaded yet
 
 assert.equal(needsAI(base, 'ok'), false);
 assert.equal(needsAI(base, 'empty'), true);

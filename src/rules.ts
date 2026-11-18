@@ -14,6 +14,7 @@ export interface PageImage {
   role: string | null;
   ariaHidden: boolean;
   linkHref: string | null;
+  linkHome: boolean; // the link goes to this site's home page (typical for logos)
   linkText: string;
   caption: string;
   heading: string;
@@ -53,7 +54,8 @@ export function ruleDecorative(img: PageImage): string | null {
   if (img.role === 'presentation' || img.role === 'none') return `role="${img.role}"`;
   // naturalWidth 0 means the image failed to load, which is not the same as a spacer.
   if (img.naturalWidth > 0 && (img.naturalWidth <= 2 || img.naturalHeight <= 2)) return 'Spacer pixel';
-  if (img.width < 24 && img.height < 24) return 'Smaller than 24 px';
+  // Only trust the rendered size once the image has loaded: a lazy image waiting offscreen measures 0x0.
+  if (img.naturalWidth > 0 && img.width < 24 && img.height < 24) return 'Smaller than 24 px';
   return null;
 }
 
