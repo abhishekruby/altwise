@@ -145,10 +145,22 @@ export async function deviceAvailability(): Promise<string> {
 
 // ---------- prompts ----------
 
+// On a slow CPU Gemini Nano takes up to a minute per image, and very rarely it never answers.
+// A hung call must not stall the whole scan; the next call opens a fresh session.
+const TIME_LIMIT_MS = 150_000;
+
+function withTimeout<T>(p: Promise<T>): Promise<T> {
+  let timer = 0;
+  return Promise.race([
+    p.finally(() => clearTimeout(timer)),
+    new Promise<never>((_, reject) => { timer = window.setTimeout(() => reject(new Error('The model took too long to answer')), TIME_LIMIT_MS); }),
+  ]);
+}
+
 /** Runs a prompt and parses its JSON. Small models sometimes return broken JSON, so try once more. */
 async function askJson<T>(model: GenerativeModel, request: (string | Part)[]): Promise<{ data: T; source: Source }> {
   for (let attempt = 0; ; attempt++) {
-    const result = await model.generateContent(request);
+    const result = await withTimeout(model.generateContent(request));
     try {
       return { data: JSON.parse(result.response.text()) as T, source: (result.response.inferenceSource ?? 'in_cloud') as Source };
     } catch {
@@ -177,7 +189,7 @@ Classify the image:
 - functional: the image is a link or button; the alt text must say where it goes or what it does. A logo that links to the home page gets the name written in the logo followed by "home", for example "Riverside Library home".
 - complex: a chart, graph, map, diagram, infographic or table that needs a long description
 Set has_people to true if any person or face is visible. Set has_text to true if the image contains words or numbers a reader needs.
-Write alt text for a screen reader user: specific, under 125 characters, no "image of". Use the page context to understand the image, but describe the image itself and do not copy page text into the alt. For decorative images the alt is "".`;
+Write alt text for a screen reader user: one short sentence of at most 15 words, specific, no "image of", no colours or clothing unless they matter. Use the page context to understand the image, but describe the image itself and do not copy page text into the alt. For decorative images the alt is "".`;
   const m = models();
   const { data, source } = await askJson<Classification>(strictPrivacy ? m.strict : m.normal, [prompt, part]);
   return { ...data, source };
