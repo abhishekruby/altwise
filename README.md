@@ -75,9 +75,19 @@ Without this, Altwise uses the cloud for everything and says so. To run on devic
 
 [demo/](demo/) is a fictional school newsletter with the usual mistakes on purpose: a file name as alt text, a chart with alt="chart", a map and a pie chart with no alt, a librarian photo marked decorative, a scanned PDF behind a "click here" link. Run `npm run web` to serve it locally.
 
+## Tested on real pages
+
+Besides the demo pages, Altwise was run on public school and town pages in November 2026, with Gemini Nano on device and strict privacy on. What they turned up changed the code:
+
+- A town parks department posted a scanned fundraising letter with no alt text. Altwise now reads it: "Town of New Ipswich Parks and Recreation letter seeking banner sponsors for $500." The first version of the photo check mistook JPEG noise around printed letters for a photograph and kept the letter local; a two-tone text test fixed that.
+- A summer program flyer had the alt "Summer Recreation Program Flyer". The ages, dates and cost exist only inside the image. Alt text that names a text image without saying what it says is now flagged as its own problem.
+- A town logo's alt was its file name with the extension dropped (`TOJ_Badge_Logo_banner_size`), which the rules used to accept.
+- Lazy-loaded images, hidden language-picker flags, tracking pixels and share icons were handled correctly.
+
 ## Known limits
 
 - Only `<img>` elements are checked. CSS background images, inline `<svg>` and images inside iframes are not.
+- The photo check is a heuristic. On designed flyers, shaded lettering and gradient clip-art can look photographic, and Gemini Nano's second look is cautious on purpose. Then the flyer stays on the device and the card asks you to check its dates, times and prices, because Nano reads small text less reliably than the cloud. Missing a real child's face would be worse than a shorter description.
 - One page at a time. There is no site crawl.
 - Gemini Nano needs a capable computer (see above). On other computers Altwise still works, using the cloud after you agree to it.
 

@@ -58,6 +58,14 @@ const rnd = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648
 const grey = flat.slice();
 for (let y = 0; y < 16; y++) for (let x = 48; x < 64; x++) { const i = (y * W + x) * 4, v = 40 + rnd() * 180; grey[i] = grey[i + 1] = grey[i + 2] = v; }
 assert.deepEqual(photoRegions(grey, W, H), [[48, 0]]);
+// A JPEG-scanned line of text: two-tone with compression fuzz, not a photo.
+const text = flat.slice();
+for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+  const i = (y * W + x) * 4, ink = (x % 5 < 2 && y % 7 < 5);
+  const v = ink ? 20 + rnd() * 30 : 210 + rnd() * 45;
+  text[i] = text[i + 1] = text[i + 2] = v;
+}
+assert.deepEqual(photoRegions(text, W, H), []);
 assert.equal(redactable(1, W, H), true); // 1 of 16 tiles is photo: blank it out
 assert.equal(redactable(12, W, H), false); // mostly photo: keep it local
 assert.equal(redactable(0, W, H), false);

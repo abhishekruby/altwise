@@ -374,7 +374,9 @@ async function processItem(item: Item): Promise<{ cloud?: Promise<void> }> {
           item.hasPeople = true;
           const blanked = redactable(regions.length, natural.width, natural.height) ? redact(natural, regions) : null;
           if (!blanked) {
-            if (!c.has_people) item.note = 'Gemini Nano found a person on a second look, so this stays on the device';
+            if (!c.has_people) item.note = 'Gemini Nano may have seen a person, so this stays on the device to be safe';
+            // Gemini Nano reads small text less reliably than the cloud. Say so instead of hiding it.
+            if (c.has_text) item.note += '. Check that the alt includes the dates, times and prices shown in the image.';
             await finish(item);
             return {};
           }

@@ -99,29 +99,40 @@ export function wantsCloud(c: Classification, escalateText = true): boolean {
  * anti-aliased edges. In photos, sensor noise and texture make identical neighbours rare, in colour
  * and in black and white alike. A drawing with no such tiles cannot show a real person, and a small
  * photo pasted into a flyer still produces a few, which tells us exactly where it is.
- * ponytail: a heuristic. JPEG-compressed charts and gradients can count as photo-like; that only
- * costs one extra on-device check or keeps an image local, never a privacy leak.
+ * Text needs a second test: in a JPEG scan of a letter, compression noise around the letters also
+ * breaks up identical neighbours. But a text tile is two-tone (ink and paper plus fuzz), so most of
+ * its pixels sit near its darkest or lightest value, while a photo tile is spread across midtones.
+ * ponytail: a heuristic. Gradients and noisy charts can still count as photo-like; that only costs
+ * one extra on-device check or keeps an image local, never a privacy leak.
  */
 export function photoRegions(rgba: Uint8ClampedArray, width: number, height: number, tile = 16): [number, number][] {
   const found: [number, number][] = [];
   const seen = new Uint32Array(256); // brightness level -> last tile that used it, so no per-tile allocation
+  const lums = new Uint8Array(tile * tile);
   let tileNo = 0;
   for (let ty = 0; ty + tile <= height; ty += tile) {
     for (let tx = 0; tx + tile <= width; tx += tile) {
-      let same = 0, pairs = 0, levels = 0;
+      let same = 0, pairs = 0, levels = 0, lo = 255, hi = 0, k = 0;
       tileNo++;
       for (let y = ty; y < ty + tile; y++) {
         for (let x = tx; x < tx + tile; x++) {
           const i = (y * width + x) * 4;
           const l = ((rgba[i] * 3 + rgba[i + 1] * 6 + rgba[i + 2]) / 10) | 0;
           if (seen[l] !== tileNo) { seen[l] = tileNo; levels++; }
+          lums[k++] = l;
+          if (l < lo) lo = l;
+          if (l > hi) hi = l;
           if (x + 1 < tx + tile) {
             pairs++;
             if (Math.abs(rgba[i] - rgba[i + 4]) + Math.abs(rgba[i + 1] - rgba[i + 5]) + Math.abs(rgba[i + 2] - rgba[i + 6]) <= 3) same++;
           }
         }
       }
-      if (same / pairs < 0.35 && levels >= 32) found.push([tx, ty]);
+      if (same / pairs >= 0.35 || levels < 32) continue;
+      const band = Math.max(24, ((hi - lo) / 5) | 0);
+      let extremes = 0;
+      for (let i = 0; i < k; i++) if (lums[i] - lo <= band || hi - lums[i] <= band) extremes++;
+      if (extremes / k < 0.75) found.push([tx, ty]);
     }
   }
   return found;
