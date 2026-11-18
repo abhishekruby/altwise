@@ -56,6 +56,8 @@ Without this, Altwise uses the cloud for everything and says so. To run on devic
 
 ### Demo page
 
+**Live demo page: https://abhishekruby.github.io/altwise/demo/** (open it, then click the Altwise icon and scan).
+
 [demo/](demo/) is a fictional school newsletter with the usual mistakes on purpose: a file name as alt text, a chart with alt="chart", a map and a pie chart with no alt, a librarian photo marked decorative, a scanned PDF behind a "click here" link. Serve the repo with `npx vite` and open `http://localhost:5173/demo/`.
 
 ## Development
