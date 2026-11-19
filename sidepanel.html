@@ -44,16 +44,17 @@
   #error { color: var(--bad); font-size: 13px; }
   .box { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; margin-top: 12px; }
   #page-title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .scores { display: flex; align-items: baseline; gap: 10px; margin: 8px 0 12px; }
-  .score { font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; }
-  .score small { font-size: 13px; color: var(--muted); font-weight: 400; }
+  .scores { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; margin: 8px 0 12px; }
+  .score { font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .score small { font-size: 12px; color: var(--muted); font-weight: 400; }
   .arrow { color: var(--muted); }
   .meter { display: flex; height: 10px; border-radius: 6px; overflow: hidden; background: var(--line); gap: 2px; }
   .meter div { flex: 0 1 0; transition: flex-grow .4s; }
   #meter-rules { background: var(--muted); opacity: .5; }
   #meter-local { background: var(--device); }
   #meter-cloud { background: var(--cloud); }
-  .legend { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; margin-top: 6px; }
+  .legend { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 8px; font-size: 12px; margin-top: 6px; }
+  .legend span { white-space: nowrap; }
   .legend b { font-variant-numeric: tabular-nums; }
   .legend .r { color: var(--muted); } .legend .l { color: var(--device); } .legend .c { color: var(--cloud); }
   #privacy-line { font-size: 13px; margin-top: 8px; font-weight: 600; }
