@@ -1,5 +1,9 @@
 # Altwise
 
+![Altwise checking a school newsletter: each image on the page is labelled On device or Cloud, and the side panel says no photo of a person was sent to the cloud](docs/hero.png)
+
+**Try it now, nothing to install: https://altwise.web.app** · [Privacy test page](https://altwise.web.app/try?page=flyers) · [Load the extension](#load-the-extension)
+
 Altwise is a Chrome extension for the people who keep school and town websites running. Open it on any page and it finds every image with missing or weak alt text, writes a better version, and checks the PDFs the page links to. You review each suggestion, accept it, and copy the fixed HTML into your CMS.
 
 It uses Firebase AI Logic hybrid inference. Gemini Nano runs on your computer, looks at every image first and decides what the cloud is allowed to see. Photos of people stay on the computer. Charts, maps and posters full of text go to Gemini in the cloud, because reading small numbers needs a bigger model. When a flyer full of text also has a small photo of children in the corner, Altwise paints the photo grey on your computer and sends the cloud only the rest. Linked PDFs go to the cloud too, since PDF input is cloud only.
@@ -14,11 +18,11 @@ Sending every image to a cloud API is the obvious build, and it is the wrong one
 
 ## How the routing works
 
-Every image goes through three steps, and the side panel shows which one handled it.
+Every image goes through the steps below, and the side panel and the page itself show which one handled it.
 
 | Step | Where it runs | What it does |
 |---|---|---|
-| Rules | Your browser, no AI | Skips hidden, tiny and spacer images. Grades existing alt text: missing, file name, generic ("chart", "logo"), too long, starts with "image of". |
+| Rules | Your browser, no AI | Skips hidden, tiny and spacer images. Grades existing alt text: missing, a file name (with or without the extension), a single generic word ("chart", "logo"), a label that names a text image without saying what it says ("Summer Recreation Program Flyer"), too long, or starting with "image of". |
 | Gemini Nano | On device | Classifies the image as decorative, informative, functional (a link) or complex, notes whether people or text are visible, and writes alt text using the page heading, caption, link target and nearby paragraph. |
 | Photo check | Your browser, no AI | Before anything leaves the computer, the image is split into 16 px tiles. In drawings (charts, maps, tables, icons) neighbouring pixels are mostly identical. In photographs they almost never are, in colour or black and white. A drawing cannot show a real person, so it may go to the cloud even if Nano thought it saw stick figures. |
 | Gemini Nano, second look | On device | Runs when an image that contains a photo is about to go to the cloud. One narrow question: is any person visible anywhere? Unsure counts as yes, and so does a failed check. |
@@ -43,6 +47,7 @@ The counter at the top shows how many images were handled by rules, by Gemini Na
 
 - **Firebase AI Logic** (`firebase/ai`): one hybrid model for classification (`PREFER_ON_DEVICE` or `ONLY_ON_DEVICE`, with a JSON schema passed as `responseConstraint` on device and `responseJsonSchema` in the cloud), plus two cloud-only models for long descriptions and PDF review. See [src/ai.ts](src/ai.ts).
 - **App Check**: required by AI Logic. Chrome extensions cannot load reCAPTCHA (Manifest V3 blocks remote code), so the extension uses the debug provider, which the hackathon rules allow.
+- **Firebase Hosting** serves the no-install version at https://altwise.web.app. That build uses App Check with reCAPTCHA (Google Cloud Fraud Defense), and it fails if the debug token ever ends up in the public files.
 - **Remote Config**: the cloud model name, the image limit per scan, whether text images escalate, and the PDF size limit can change without shipping a new build. The template is in [remote-config.json](remote-config.json).
 
 ## Try it
@@ -51,7 +56,11 @@ The counter at the top shows how many images were handled by rules, by Gemini Na
 
 ### Load the extension
 
-You need Chrome 139 or later on desktop.
+You need Chrome on desktop.
+
+**Quickest:** download `altwise-extension.zip` from the [Releases page](https://github.com/abhishekruby/altwise/releases), unzip it, open `chrome://extensions`, turn on Developer mode, click **Load unpacked** and choose the `altwise` folder. It is already configured, nothing else to set up.
+
+**From source:**
 
 1. Clone the repo and install: `npm install`
 2. Copy `.env.example` to `.env.local` and fill in a Firebase web app config with AI Logic (Gemini Developer API) and App Check enabled. Register an App Check debug token in the Firebase console and put it in `VITE_APPCHECK_DEBUG_TOKEN`.
@@ -63,7 +72,7 @@ You need Chrome 139 or later on desktop.
 
 Without this, Altwise uses the cloud for everything and says so. To run on device:
 
-1. In `chrome://flags`, enable **Prompt API for Gemini Nano with Multimodal Input**, then relaunch.
+1. Use a recent Chrome. Image input to the Prompt API is on by default from Chrome 148. On older versions, enable **Prompt API for Gemini Nano with Multimodal Input** in `chrome://flags` and relaunch.
 2. Check that your computer meets [Chrome's hardware requirements](https://developer.chrome.com/docs/ai/get-started) (a GPU with more than 4 GB of VRAM, or 16 GB of RAM and 4 CPU cores, plus about 22 GB of free disk).
 3. Click **Scan this page** once. That starts the model download, and the status chip in the panel shows progress.
 

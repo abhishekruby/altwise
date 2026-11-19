@@ -58,12 +58,13 @@
   This site is protected by reCAPTCHA and the Google <a href="https://policies.google.com/privacy">Privacy Policy</a> and <a href="https://policies.google.com/terms">Terms of Service</a> apply.
 </footer>
 <script>
-  for (const b of document.querySelectorAll('.pages button')) {
-    b.addEventListener('click', () => {
-      document.getElementById('page').src = b.dataset.src;
-      for (const o of document.querySelectorAll('.pages button')) o.setAttribute('aria-pressed', String(o === b));
-    });
-  }
+  const show = (b) => {
+    document.getElementById('page').src = b.dataset.src;
+    for (const o of document.querySelectorAll('.pages button')) o.setAttribute('aria-pressed', String(o === b));
+  };
+  for (const b of document.querySelectorAll('.pages button')) b.addEventListener('click', () => show(b));
+  // ?page=flyers opens the privacy test page directly (linked from the README and Devpost).
+  if (new URLSearchParams(location.search).get('page') === 'flyers') show(document.querySelector('[data-src="demo/flyers.html"]'));
 </script>
 </body>
 </html>
