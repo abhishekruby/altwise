@@ -44,5 +44,6 @@ local-government web pages.
   stacking, no three-part parallel lists, no generic mission openers.
 
 ## Current status
-See the checklist in PLAN.md. Nothing is scaffolded yet on purpose: the idea has a
-go/no-go test first (on-device alt-text quality).
+Built and working: extension, hosted try page (altwise.web.app), demo pages, tests.
+On-device quality was checked with Gemini Nano on a cloud VM. Remaining work is tracked
+in PLAN.md (kept local).
