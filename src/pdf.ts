@@ -42,8 +42,10 @@ export async function pdfFacts(buf: ArrayBuffer): Promise<PdfFacts> {
   while ((m = re.exec(raw)) && count < 300) {
     const dictStart = raw.lastIndexOf('obj', m.index);
     if (dictStart < 0 || !raw.slice(dictStart, m.index).includes('/FlateDecode')) continue;
-    const end = raw.indexOf('endstream', m.index);
+    let end = raw.indexOf('endstream', m.index);
     if (end < 0) break;
+    // PDFs put a line break before 'endstream'. Newer DecompressionStream rejects bytes after the data.
+    while (end > m.index && (raw[end - 1] === '\n' || raw[end - 1] === '\r')) end--;
     count++;
     try {
       parts.push(await inflate(bytes.subarray(m.index + m[0].length, end)));
