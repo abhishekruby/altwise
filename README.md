@@ -58,7 +58,19 @@ The counter at the top shows how many images were handled by rules, by Gemini Na
 
 You need Chrome on desktop.
 
-**Quickest:** download `altwise-extension.zip` from the [Releases page](https://github.com/abhishekruby/altwise/releases), unzip it, open `chrome://extensions`, turn on Developer mode, click **Load unpacked** and choose the `altwise` folder. It is already configured, nothing else to set up.
+**Quickest, about a minute, nothing to set up:**
+
+1. Download `altwise-extension.zip` from the [Releases page](https://github.com/abhishekruby/altwise/releases) and unzip it. You get a folder called `altwise`.
+2. Type `chrome://extensions` in the address bar and turn on **Developer mode** (top right, marked 1 below).
+3. Click **Load unpacked** (2) and choose the `altwise` folder. Altwise appears in the list (3).
+
+   ![chrome://extensions with Developer mode on, the Load unpacked button and the Altwise card](docs/install-extensions-page.png)
+
+4. Open any web page and click the Altwise icon in the toolbar (4). If you don't see it, click the puzzle-piece icon and pin Altwise. The side panel opens next to the page. Click **Scan this page**.
+
+   ![The Altwise icon in the Chrome toolbar and the side panel open next to a page](docs/install-side-panel.png)
+
+Without Gemini Nano on your computer, Altwise asks before using the cloud. To try it on a page made for it, open the [demo school page](https://abhishekruby.github.io/altwise/demo/).
 
 **From source:**
 

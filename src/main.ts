@@ -264,7 +264,9 @@ async function scan() {
       extra.status = 'error';
       extra.note = `Not checked: this scan stops at ${settings.max_images} images`;
     }
-    if (queue.length && !(await mayUseCloud())) {
+    // "Not now" means nothing leaves the computer: no images, and linked PDFs get only the local structure checks.
+    const declined = queue.length > 0 && !(await mayUseCloud());
+    if (declined) {
       for (const i of queue) {
         i.status = 'error';
         i.note = 'Not checked: Gemini Nano is not ready and the cloud was declined';
@@ -274,7 +276,7 @@ async function scan() {
 
     // PDFs are cloud work, so they start now and run while Gemini Nano reads the images.
     let pdfsDone = 0;
-    const pdfJobs = pdfs.map((p) => cloudSlot(() => processPdf(p)).then(() => { pdfsDone++; render(); }));
+    const pdfJobs = pdfs.map((p) => (declined ? processPdf(p, false) : cloudSlot(() => processPdf(p))).then(() => { pdfsDone++; render(); }));
     const cloudJobs: Promise<void>[] = [];
     for (const [n, item] of queue.entries()) {
       setProgress(`Reading image ${n + 1} of ${queue.length}${cloudActive ? ' · cloud working alongside' : ''}`, n / (queue.length + 1));
@@ -416,7 +418,7 @@ const toBase64 = (buf: ArrayBuffer) => new Promise<string>((resolve, reject) => 
 });
 
 /** Structure checks run locally on the bytes; the content review needs the cloud (PDF input is cloud only). */
-async function processPdf(p: PdfItem) {
+async function processPdf(p: PdfItem, cloud = true) {
   p.status = 'working';
   render();
   try {
@@ -425,7 +427,9 @@ async function processPdf(p: PdfItem) {
     const buf = await res.arrayBuffer();
     p.sizeKb = Math.round(buf.byteLength / 1024);
     p.facts = await pdfFacts(buf);
-    if (buf.byteLength > settings.pdf_max_mb * 1024 * 1024) {
+    if (!cloud) {
+      p.note = 'The cloud was declined, so only the structure was checked';
+    } else if (buf.byteLength > settings.pdf_max_mb * 1024 * 1024) {
       p.note = `Larger than ${settings.pdf_max_mb} MB, so only the structure was checked`;
     } else {
       p.review = await reviewPdf(await toBase64(buf), p.link.text, page.title);

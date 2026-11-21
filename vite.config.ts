@@ -19,6 +19,13 @@ export default defineConfig(({ mode, command }) => {
       rollupOptions: { input: web ? ['try.html', 'sidepanel.html'] : 'sidepanel.html' },
     },
     plugins: [{
+      // The Firebase SDK carries loaders for remote scripts (reCAPTCHA, gtag, gapi). The extension never runs them
+      // (it uses the App Check debug provider and MV3 blocks remote code anyway), but Chrome Web Store review
+      // rejects bundles that contain them, so the extension build blanks the URLs out.
+      name: 'no-remote-script-urls',
+      renderChunk: (code: string) => web ? null
+        : code.replace(/https:\/\/(www\.google\.com\/recaptcha\/[a-z]+\.js|www\.googletagmanager\.com\/gtag\/js|apis\.google\.com\/js\/api\.js)/g, 'about:invalid'),
+    }, {
       // In the web version the panel starts from src/web.ts, which stands in for chrome.* first.
       name: 'web-panel',
       transformIndexHtml: {

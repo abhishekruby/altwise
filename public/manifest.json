@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Altwise",
   "version": "1.0.0",
-  "description": "Audit the images on any page and write alt text. Photos of people are read on your device and never uploaded.",
+  "description": "Fixes missing alt text on any page. Gemini Nano reads photos of people on your device; drawings and text go to the cloud.",
   "minimum_chrome_version": "139",
   "action": {
     "default_title": "Open Altwise",

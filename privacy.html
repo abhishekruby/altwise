@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Altwise privacy policy</title>
+<link rel="icon" href="demo/img/logo.svg">
+<style>
+  :root { --bg: #f7f6f2; --panel: #ffffff; --ink: #1c1f23; --muted: #5d6470; --line: #e3e1da; --device: #0d7a5f; color-scheme: light; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #15171a; --panel: #1e2125; --ink: #eceae4; --muted: #a2a8b2; --line: #30343a; --device: #4fd1a5; color-scheme: dark; }
+  }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 720px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 28px; margin: 0 0 4px; }
+  h1 span { color: var(--device); }
+  h2 { font-size: 19px; margin: 32px 0 8px; }
+  p, li { color: var(--ink); }
+  .muted { color: var(--muted); }
+  a { color: var(--device); }
+  ul { padding-left: 22px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Alt<span>wise</span> privacy policy</h1>
+  <p class="muted">Applies to the Altwise Chrome extension and the try page at altwise.web.app. Last updated 19 November 2026.</p>
+
+  <p>Altwise checks the images on a web page for missing or weak alt text and suggests better text. It is built to keep photos of people on your computer. Altwise has no server of its own, no accounts, no analytics and no ads, and it does not sell or share data.</p>
+
+  <h2>When Altwise reads a page</h2>
+  <p>Only when you click <b>Scan this page</b>. It then reads the page you are on: its images, their current alt text, nearby text such as the page title, headings and captions, and the PDF files the page links to. It does not read other tabs, your browsing history, form fields or passwords.</p>
+
+  <h2>What stays on your computer</h2>
+  <ul>
+    <li>Simple rules (file names, spacer images, hidden images) run in your browser.</li>
+    <li>Gemini Nano, the AI model built into Chrome, reads images on your computer when it is available.</li>
+    <li>Photographs that may show a person are kept on your computer. Before an image is sent to the cloud, a pixel check and a second question to Gemini Nano look for people; if either is unsure, the image stays on your computer.</li>
+  </ul>
+
+  <h2>What is sent to Google's cloud</h2>
+  <p>Some work needs a larger model, Gemini, which Altwise reaches through Google's Firebase AI Logic. These are sent:</p>
+  <ul>
+    <li>Images that are drawings, such as charts, maps and posters, together with the page's title and nearby text.</li>
+    <li>Flyers full of text after any photo in them has been painted grey on your computer. The panel shows you exactly what was sent.</li>
+    <li>PDF files linked from the page, for a content review, because Gemini Nano cannot read PDFs.</li>
+    <li>If Gemini Nano is not available on your computer, Altwise asks first. If you choose <b>Use the cloud</b>, images on that page, photos of people included, are read in the cloud and each result is marked that way. If you choose <b>Not now</b>, nothing from the page is sent.</li>
+  </ul>
+  <p>Altwise uses the Gemini Developer API on Google's no-cost tier. Under <a href="https://ai.google.dev/gemini-api/terms">Google's terms for that tier</a>, Google may use content sent to it to improve its products. That is one more reason Altwise keeps photos of people on your computer.</p>
+
+  <h2>Other requests to Google</h2>
+  <p>To protect the service and load its settings, Altwise also talks to Firebase App Check, Firebase Installations and Firebase Remote Config. These requests carry a random installation ID and technical tokens, not page content or personal information. <b>Listen</b> reads alt text aloud with your browser's own speech voices; depending on your system, the voice may be an online one. The try page at altwise.web.app also uses reCAPTCHA, under Google's <a href="https://policies.google.com/privacy">Privacy Policy</a> and <a href="https://policies.google.com/terms">Terms of Service</a>.</p>
+
+  <h2>What Altwise stores</h2>
+  <ul>
+    <li>The results of your last scan, in Chrome's session storage, so the panel can show them again. They are deleted when you close Chrome.</li>
+    <li>Your <b>Strict privacy</b> setting, in Chrome's local storage.</li>
+  </ul>
+  <p>Altwise never changes the website you scan. Accepted suggestions are previewed on your screen only, and you copy the HTML yourself.</p>
+
+  <h2>Contact</h2>
+  <p>Altwise is open source under the Apache-2.0 license. Questions or concerns: open an issue at <a href="https://github.com/abhishekruby/altwise/issues">github.com/abhishekruby/altwise</a>.</p>
+</main>
+</body>
+</html>
