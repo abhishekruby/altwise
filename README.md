@@ -2,7 +2,7 @@
 
 ![Altwise checking a school newsletter: each image on the page is labelled On device or Cloud, and the side panel says no photo of a person was sent to the cloud](docs/hero.png)
 
-**Try it now, nothing to install: https://altwise.web.app** · [Privacy test page](https://altwise.web.app/try?page=flyers) · [Load the extension](#load-the-extension)
+**Try it now, nothing to install: https://altwise.web.app** · [Privacy test page](https://altwise.web.app/try?page=flyers) · [Load the extension](#load-the-extension) · [Demo video (2 min)](https://youtu.be/bKrDT9s1E04)
 
 Altwise is a Chrome extension for the people who keep school and town websites running. Open it on any page and it finds every image with missing or weak alt text, writes a better version, and checks the PDFs the page links to. You review each suggestion, accept it, and copy the fixed HTML into your CMS.
 
