@@ -177,10 +177,12 @@
 <dialog id="cloud-ask" aria-labelledby="cloud-ask-h" aria-describedby="cloud-ask-why cloud-ask-what">
   <h2 id="cloud-ask-h">Gemini Nano isn't ready on this computer</h2>
   <p id="cloud-ask-why"></p>
-  <p id="cloud-ask-what">Without it, every image on this page, photos of people included, would be read by Gemini in the cloud.</p>
+  <p id="cloud-ask-what"><b>Keep photos here:</b> drawings, charts and text are read in the cloud. A photo inside a flyer is painted grey first, and plain photos stay on this computer for you to describe.</p>
+  <p><b>Use the cloud for all:</b> every image is read by Gemini in the cloud, photos of people included.</p>
   <form method="dialog" class="actions">
-    <button value="cloud" class="primary">Use the cloud</button>
-    <button value="cancel" autofocus>Not now</button>
+    <button value="local" class="primary" autofocus>Keep photos here</button>
+    <button value="cloud">Use the cloud for all</button>
+    <button value="cancel">Not now</button>
   </form>
 </dialog>
 <script type="module" src="./src/main.ts"></script>

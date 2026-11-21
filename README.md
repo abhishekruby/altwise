@@ -31,7 +31,13 @@ Every image goes through the steps below, and the side panel and the page itself
 
 PDFs get structure checks on the device (tagged, descriptive title, language, real text or a scan, vague link text like "click here"). The content review goes to the cloud, because PDF input is cloud only.
 
-If Gemini Nano is not available yet (it downloads in the background, and some computers cannot run it), `PREFER_ON_DEVICE` would send every image to the cloud, photos of people included. Altwise asks first. Say yes and the scan runs in the cloud, with every card marked that way. Say no and nothing leaves the computer. **Strict privacy** switches the classifier to `ONLY_ON_DEVICE`, so it never falls back and never asks.
+If Gemini Nano is not available (it downloads in the background, and many office computers cannot run it), `PREFER_ON_DEVICE` would send every image to the cloud, photos of people included. Altwise asks first, with three choices:
+
+- **Keep photos here** (the default). The photo check needs no AI, so it still works: drawings, charts and text go to the cloud, a flyer's photo is painted grey before it is sent, and an image that is mostly photo never leaves the computer. Its card asks the person to write that alt text. The privacy promise holds on every computer.
+- **Use the cloud for all.** Every image is read in the cloud and every card says so. Afterwards the summary says how many photos of people went.
+- **Not now.** Nothing from the page leaves the computer, linked PDFs included.
+
+**Strict privacy** switches the classifier to `ONLY_ON_DEVICE`, so it never falls back and never asks.
 
 The counter at the top shows how many images were handled by rules, by Gemini Nano and by the cloud, and how many never left the computer. The badge on each result comes from the SDK's `inferenceSource`, not from a guess, and shows how long that step took.
 
@@ -50,6 +56,19 @@ The counter at the top shows how many images were handled by rules, by Gemini Na
 - **Firebase Hosting** serves the no-install version at https://altwise.web.app. That build uses App Check with reCAPTCHA (Google Cloud Fraud Defense), and it fails if the debug token ever ends up in the public files.
 - **Remote Config**: the cloud model name, the image limit per scan, whether text images escalate, and the PDF size limit can change without shipping a new build. The template is in [remote-config.json](remote-config.json).
 
+### Where Firebase AI Logic is called
+
+| What | Where |
+|---|---|
+| `firebase/ai` imported, `getAI` with the Gemini Developer API | [src/ai.ts:6](src/ai.ts#L6) |
+| Hybrid classifier: `InferenceMode.PREFER_ON_DEVICE` (or `ONLY_ON_DEVICE` in strict privacy), same JSON schema as `responseConstraint` on device and `responseJsonSchema` in the cloud | [src/ai.ts:82](src/ai.ts#L82) |
+| Cloud-only models (`ONLY_IN_CLOUD`) for long descriptions and PDF review | [src/ai.ts:96](src/ai.ts#L96) |
+| The people check, `ONLY_ON_DEVICE` so it can never reach the cloud | [src/ai.ts:111](src/ai.ts#L111) |
+| `initializeDeviceModel()` from the Scan click, with download progress | [src/ai.ts:143](src/ai.ts#L143) |
+| `generateContent()` with retries, and `response.inferenceSource` read for every badge | [src/ai.ts:181](src/ai.ts#L181) |
+| Routing: rules, then Nano, the photo check, the second look, blanking, the cloud | [src/main.ts](src/main.ts), `processItem` |
+| App Check (debug provider in the extension, reCAPTCHA on the web) and Remote Config | [src/ai.ts:26](src/ai.ts#L26), [src/ai.ts:50](src/ai.ts#L50) |
+
 ## Try it
 
 **In your browser, nothing to install: https://altwise.web.app** shows the demo school page beside the real Altwise panel. It is the same panel code as the extension, built as a normal web page (Firebase Hosting, App Check with reCAPTCHA through Google Cloud Fraud Defense). Gemini Nano runs on device wherever Chrome supports the Prompt API on the web; otherwise Altwise asks before using the cloud.
@@ -60,7 +79,7 @@ You need Chrome on desktop.
 
 **Quickest, about a minute, nothing to set up:**
 
-1. Download `altwise-extension.zip` from the [Releases page](https://github.com/abhishekruby/altwise/releases) and unzip it. You get a folder called `altwise`.
+1. Download [altwise-extension.zip](https://altwise.web.app/altwise-extension.zip) and unzip it. You get a folder called `altwise`.
 2. Type `chrome://extensions` in the address bar and turn on **Developer mode** (top right, marked 1 below).
 3. Click **Load unpacked** (2) and choose the `altwise` folder. Altwise appears in the list (3).
 
@@ -70,7 +89,7 @@ You need Chrome on desktop.
 
    ![The Altwise icon in the Chrome toolbar and the side panel open next to a page](docs/install-side-panel.png)
 
-Without Gemini Nano on your computer, Altwise asks before using the cloud. To try it on a page made for it, open the [demo school page](https://abhishekruby.github.io/altwise/demo/).
+Without Gemini Nano on your computer, Altwise asks before using the cloud; choose **Keep photos here** to see the privacy path. To try it on a page made for it, open the [demo school page](https://abhishekruby.github.io/altwise/demo/) or the [flyers page](https://abhishekruby.github.io/altwise/demo/flyers.html).
 
 **From source:**
 
@@ -84,7 +103,7 @@ Without Gemini Nano on your computer, Altwise asks before using the cloud. To tr
 
 Without this, Altwise uses the cloud for everything and says so. To run on device:
 
-1. Use a recent Chrome. Image input to the Prompt API is on by default from Chrome 148. On older versions, enable **Prompt API for Gemini Nano with Multimodal Input** in `chrome://flags` and relaunch.
+1. Use a recent Chrome (148 or later). If the panel's status chip never shows Gemini Nano, open `chrome://flags`, search for **Gemma 4 for Built-in AI** (the on-device model behind Gemini Nano 4, as the hackathon FAQ describes), enable it and relaunch. On older Chrome versions, also enable **Prompt API for Gemini Nano with Multimodal Input**.
 2. Check that your computer meets [Chrome's hardware requirements](https://developer.chrome.com/docs/ai/get-started) (a GPU with more than 4 GB of VRAM, or 16 GB of RAM and 4 CPU cores, plus about 22 GB of free disk).
 3. Click **Scan this page** once. That starts the model download, and the status chip in the panel shows progress.
 

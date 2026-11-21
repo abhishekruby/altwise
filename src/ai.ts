@@ -168,23 +168,26 @@ function withTimeout<T>(p: Promise<T>): Promise<T> {
 const transient = (e: unknown) => /\b(429|500|502|503|504)\b|overloaded|unavailable|RESOURCE_EXHAUSTED|Failed to fetch|network/i.test(String(e));
 
 /**
- * Runs a prompt and parses its JSON. Small models sometimes return broken JSON, and the cloud is
- * sometimes briefly busy, so each gets one more try. A timeout is not retried.
+ * Runs a prompt and parses its JSON. Small models sometimes return broken JSON (one more try), and the
+ * cloud's free tier has per-minute limits, so a busy answer is retried with growing waits (3, 12, 30 s),
+ * enough for a minute's quota to reset. A timeout is not retried.
  */
+const BUSY_WAITS = [3000, 12000, 30000];
 async function askJson<T>(model: GenerativeModel, request: (string | Part)[]): Promise<{ data: T; source: Source }> {
-  for (let attempt = 0; ; attempt++) {
+  let busy = 0, broken = 0;
+  for (;;) {
     let result;
     try {
       result = await withTimeout(model.generateContent(request));
     } catch (e) {
-      if (attempt > 0 || !transient(e)) throw e;
-      await new Promise((r) => setTimeout(r, 2500));
+      if (busy >= BUSY_WAITS.length || !transient(e)) throw e;
+      await new Promise((r) => setTimeout(r, BUSY_WAITS[busy++]));
       continue;
     }
     try {
       return { data: JSON.parse(result.response.text()) as T, source: (result.response.inferenceSource ?? 'in_cloud') as Source };
     } catch {
-      if (attempt > 0) throw new Error('The model returned unreadable output');
+      if (broken++ > 0) throw new Error('The model returned unreadable output');
     }
   }
 }

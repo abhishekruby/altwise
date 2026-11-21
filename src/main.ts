@@ -22,6 +22,7 @@ interface Item {
   ms: { device?: number; cloud?: number };
   thumb?: string;
   cloudView?: string; // what the cloud was sent, when a photo of people was blanked out first
+  manual?: boolean; // a photo kept on this computer without Gemini Nano: the person writes the alt
 }
 
 const $ = <T extends HTMLElement>(sel: string) => document.querySelector(sel) as T;
@@ -43,7 +44,10 @@ let tabId = 0;
 let filter: 'todo' | 'all' | 'pdf' = 'todo';
 let strict = false;
 let busy = false;
-let cloudOk = false; // the person agreed to cloud processing while Gemini Nano is missing
+// What the person chose while Gemini Nano is missing: 'local' keeps photos here (drawings and text still go
+// to the cloud, photos in flyers are painted grey first), 'cloud' sends every image.
+let cloudChoice: '' | 'local' | 'cloud' = '';
+const keepPhotos = () => cloudChoice === 'local' && availability !== 'available' && !strict;
 let scanMs = 0;
 const testTarget = new URLSearchParams(location.search).get('target'); // lets the panel run in a normal tab for testing
 
@@ -86,7 +90,7 @@ function startDownload() {
  * Ask once per panel session before that happens. Strict privacy never falls back, so it never asks.
  */
 async function mayUseCloud(): Promise<boolean> {
-  if (strict || cloudOk || availability === 'available') return true;
+  if (strict || cloudChoice || availability === 'available') return true;
   const d = $('#cloud-ask') as HTMLDialogElement;
   $('#cloud-ask-why').textContent = availability === 'downloading' || availability === 'downloadable'
     ? 'It is still downloading. Once it is ready, scans run on this computer again.'
@@ -99,8 +103,8 @@ async function mayUseCloud(): Promise<boolean> {
     d.addEventListener('close', () => resolve(d.returnValue), { once: true });
   });
   d.close();
-  cloudOk = choice === 'cloud';
-  return cloudOk;
+  if (choice === 'local' || choice === 'cloud') cloudChoice = choice;
+  return Boolean(cloudChoice);
 }
 
 // ---------- image loading ----------
@@ -119,8 +123,8 @@ function toCanvasFrom(src: HTMLCanvasElement, max: number): HTMLCanvasElement {
  * Draws the image scaled to fit `max`. With `square`, it is centred on a white square instead:
  * Gemini Nano stretches every image to a square, which squashes logos, banners and wide charts.
  */
-function toCanvas(el: HTMLImageElement, max: number, square = false): HTMLCanvasElement {
-  const w0 = el.naturalWidth || 300, h0 = el.naturalHeight || 150;
+function toCanvas(el: HTMLImageElement | HTMLCanvasElement, max: number, square = false): HTMLCanvasElement {
+  const w0 = ('naturalWidth' in el ? el.naturalWidth : el.width) || 300, h0 = ('naturalHeight' in el ? el.naturalHeight : el.height) || 150;
   const scale = Math.min(1, max / Math.max(w0, h0));
   const w = Math.max(1, Math.round(w0 * scale)), h = Math.max(1, Math.round(h0 * scale));
   const canvas = document.createElement('canvas');
@@ -341,12 +345,30 @@ async function processItem(item: Item): Promise<{ cloud?: Promise<void> }> {
   render();
   await inPage(markOnPage, [item.img.id, 'Reading…', 'working', true]);
   try {
-    const { part, natural, thumb, regions } = await loadImage(item.img.src).catch(() => {
+    let { part, natural, regions, thumb } = await loadImage(item.img.src).catch(() => {
       throw new Error('Could not load this image');
     });
-    const hasPhoto = regions.length > 0;
     item.thumb = thumb;
     item.cloudView = undefined;
+    item.manual = false;
+    let blankedHere = false;
+    // No Gemini Nano, and the person chose to keep photos here: the pixel check needs no AI. A flyer gets its
+    // photo painted grey before anything is sent; an image that is mostly photo never leaves this computer.
+    if (keepPhotos() && regions.length) {
+      const blanked = redactable(regions.length, natural.width, natural.height) ? redact(natural, regions) : null;
+      if (!blanked) {
+        Object.assign(item, { status: 'review', kind: 'informative', suggestion: '', manual: true,
+          note: 'A photo. Without Gemini Nano, Altwise keeps photos on this computer, so write its alt text yourself.' });
+        await inPage(markOnPage, [item.img.id, 'Kept on this computer', 'device', false]);
+        return {};
+      }
+      item.cloudView = toCanvasFrom(blanked, 320).toDataURL('image/jpeg', 0.8);
+      natural = blanked;
+      part = jpeg(toCanvas(blanked, 768, true));
+      regions = [];
+      blankedHere = true;
+    }
+    const hasPhoto = regions.length > 0;
     let t = performance.now();
     const c = await classify(item.img, part, page.title, strict);
     item.ms[c.source === 'on_device' ? 'device' : 'cloud'] = performance.now() - t;
@@ -361,7 +383,7 @@ async function processItem(item: Item): Promise<{ cloud?: Promise<void> }> {
 
     if (wantsCloud(c, settings.escalate_text_images)) {
       let send = natural;
-      let why = hasPhoto ? 'Read in the cloud because Gemini Nano is not ready' : 'A drawing, no photo of anyone';
+      let why = blankedHere ? 'Photo painted grey on this computer' : hasPhoto ? 'Read in the cloud because Gemini Nano is not ready' : 'A drawing, no photo of anyone';
       let photoSeen = '';
       if (hasPhoto && c.source === 'on_device') {
         let people = c.has_people;
@@ -460,7 +482,8 @@ const OK_AFTER: Status[] = ['skipped', 'fine', 'accepted', 'review']; // review 
 
 function score(list: Item[], after: boolean): number {
   if (!list.length) return 100;
-  const ok = list.filter((i) => (after ? OK_AFTER : OK_NOW).includes(i.status)).length;
+  const ready = (i: Item) => !(i.manual && !i.suggestion?.trim() && i.status === 'review'); // a kept photo still needs its alt
+  const ok = list.filter((i) => (after ? OK_AFTER : OK_NOW).includes(i.status) && (!after || ready(i))).length;
   return Math.round((ok / list.length) * 100);
 }
 
@@ -529,7 +552,7 @@ function render() {
   for (const t of ['todo', 'all', 'pdf'] as const) $(`#tab-${t}`).ariaPressed = String(filter === t);
   $('#list').hidden = filter === 'pdf';
   $('#pdfs').hidden = filter !== 'pdf';
-  const reviewable = items.filter((i) => i.status === 'review').length;
+  const reviewable = items.filter((i) => i.status === 'review' && !(i.manual && !i.suggestion?.trim())).length;
   $('#accept-all').textContent = reviewable ? `Accept all ${reviewable}` : 'Accept all';
   $('#accept-all').toggleAttribute('disabled', !reviewable);
 
@@ -576,7 +599,7 @@ function card(i: Item): string {
   if (i.status === 'queued') body = `<div class="state">Waiting</div>`;
   else if (i.status === 'working') body = `<div class="state working">${i.sources.length ? 'Cloud is writing a full description…' : 'Reading image…'}</div>`;
   else if (i.status === 'review' || i.status === 'accepted') {
-    body = `<label class="field-label" for="alt-${id}">Suggested alt text${i.kind === 'decorative' ? ' (empty, decorative)' : ''}</label>
+    body = `<label class="field-label" for="alt-${id}">${i.manual ? 'Alt text (write what the photo shows)' : `Suggested alt text${i.kind === 'decorative' ? ' (empty, decorative)' : ''}`}</label>
       <textarea id="alt-${id}" data-id="${id}" rows="2" maxlength="250">${esc(i.suggestion ?? '')}</textarea>
       ${i.longDescription ? `<details><summary>Long description</summary><p>${esc(i.longDescription)}</p></details>` : ''}
       ${i.cloudView ? `<details><summary>What the cloud saw</summary><img class="cloud-view" src="${i.cloudView}" alt="The image as sent to the cloud, with the photo of people painted grey"></details>` : ''}
@@ -707,6 +730,7 @@ function flash(btn: HTMLElement, text: string) {
 }
 
 async function accept(item: Item) {
+  if (item.manual && !item.suggestion?.trim()) return; // a kept photo needs the person's own alt first
   item.status = 'accepted';
   await inPage(applyAltOnPage, [item.img.id, item.suggestion ?? '']);
 }
@@ -716,7 +740,7 @@ async function accept(item: Item) {
 $('#scan').addEventListener('click', scan);
 for (const t of ['todo', 'all', 'pdf'] as const) $(`#tab-${t}`).addEventListener('click', () => { filter = t; render(); });
 $('#accept-all').addEventListener('click', async () => {
-  for (const i of items.filter((i) => i.status === 'review')) await accept(i);
+  for (const i of items.filter((i) => i.status === 'review')) await accept(i); // kept photos without alt are skipped
   render();
   $('#copy-all').focus();
 });

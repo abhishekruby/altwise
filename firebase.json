@@ -2,6 +2,11 @@
   "hosting": {
     "public": "web-dist",
     "cleanUrls": true,
-    "redirects": [{ "source": "/", "destination": "/try", "type": 302 }]
+    "redirects": [{ "source": "/", "destination": "/try", "type": 302 }],
+    "headers": [{ "source": "**/*.html", "headers": [{ "key": "Cache-Control", "value": "no-cache" }] },
+                { "source": "/try", "headers": [{ "key": "Cache-Control", "value": "no-cache" }] },
+                { "source": "/sidepanel", "headers": [{ "key": "Cache-Control", "value": "no-cache" }] },
+                { "source": "/privacy", "headers": [{ "key": "Cache-Control", "value": "no-cache" }] },
+                { "source": "**/*.zip", "headers": [{ "key": "Cache-Control", "value": "no-cache" }] }]
   }
 }
